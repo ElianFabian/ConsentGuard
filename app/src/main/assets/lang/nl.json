@@ -18,7 +18,6 @@
   "niet akkoord",
   "niet accepteren",
   "ik ga niet akkoord",
-  "toestemming intrekken",
   "nee bedankt",
   "alles uitzetten",
   "alles blokkeren",
@@ -31,7 +30,21 @@
   "=weiger",
   "=nee",
   "=bezwaar",
-  "=niet toestaan"
+  "=niet toestaan",
+  "niet toestemmen",
+  "geen toestemming",
+  "alles deselecteren",
+  "weiger alle",
+  "weiger alles",
+  "wijs alles af",
+  "wijs alle af",
+  "ga door zonder",
+  "verder zonder",
+  "liever niet",
+  "liever geen cookies",
+  "geen cookies toestaan",
+  "geen cookies",
+  "accepteer geen"
  ],
  "necessary": [
   "alleen noodzakelijke",
@@ -58,7 +71,10 @@
   "=essentieel",
   "=alleen noodzakelijk",
   "=alleen essentieel",
-  "=functionele cookies"
+  "=functionele cookies",
+  "uitsluitend noodzakelijk",
+  "alleen noodzakelijk",
+  "enkel noodzakelijk"
  ],
  "manage": [
   "voorkeuren beheren",
@@ -228,23 +244,21 @@
   "maandelijks",
   "jaarlijks",
   "premium",
-  "bestellen"
+  "bestellen",
+  "abonneer"
  ],
  "acceptGuard": [
   "alles accepteren",
   "alle accepteren",
   "alle cookies accepteren",
-  "cookies accepteren",
   "alles toestaan",
   "alle cookies toestaan",
-  "cookies toestaan",
   "accepteren en sluiten",
   "accepteren and sluiten",
   "accepteren en doorgaan",
   "accepteren and doorgaan",
   "accepteer en ga verder",
   "accepteer and ga verder",
-  "ik accepteer",
   "ik ga akkoord",
   "akkoord en doorgaan",
   "akkoord and doorgaan",
@@ -260,7 +274,18 @@
   "=begrepen",
   "=doorgaan",
   "=inschakelen",
-  "=alles"
+  "=alles",
+  "=toestemming geven",
+  "=toestemming",
+  "=toestemmen",
+  "=cookies toestaan",
+  "=cookies accepteren",
+  "=ik accepteer",
+  "accepteer alle",
+  "accepteer alles",
+  "=is goed",
+  "ja prima",
+  "=prima"
  ],
  "acceptWords": [
   "accept*",

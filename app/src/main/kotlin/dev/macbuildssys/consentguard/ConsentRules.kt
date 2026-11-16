@@ -60,7 +60,7 @@ object ConsentText {
         for (raw in input) {
             when {
                 raw == '\'' || raw == '\u2019' || raw == '\u2018' || raw == '`' || raw == '\u02BC' -> {
-                    // Apostrophes vanish so "don't" and "dont" are the same word.
+                    // Apostrophes vanish so "don't" and "dont" are the same word
                 }
                 raw == '&' -> {
                     if (!lastWasSpace) out.append(' ')
@@ -141,7 +141,7 @@ class PatternList(patterns: List<String>) {
     private val matchCache = HashMap<String, Boolean>()
     private val wordCache = HashMap<String, Boolean>()
 
-    /* Expects text that has already been through ConsentText.normalize. */
+    /* Expects text that has already been through ConsentText.normalize */
     fun matches(normalizedText: String): Boolean {
         if (normalizedText.isEmpty()) return false
         val cacheable = normalizedText.length <= CACHE_TEXT_LIMIT
@@ -246,7 +246,7 @@ data class ConsentRule(
    a switch that has to stay on from one that gets turned off. Lives in
    consent_lexicon.json so it can be extended without touching code. */
 data class ConsentLexicon(
-    /* At least one of these must be on screen before anything is tapped. */
+    /* At least one of these must be on screen before anything is tapped */
     val anchorTextPatterns: PatternList,
     /* Phrases that only appear in a real cookie preference panel. The
        generic switch handler needs two different ones on screen before it
@@ -286,12 +286,6 @@ data class ConsentLexicon(
        a screen that shows any of it. */
     val sensitiveScreenTextPatterns: PatternList = PatternList.EMPTY
 ) {
-    /* True when a switch label says the switch is required for the site to
-       work, so it is left on. Two things cancel that. "Non essential" and
-       "unnecessary" describe switches to turn off. And a label that says
-       required but also names an advertising or measurement purpose is not
-       trusted, since a truly required switch does not need to say it is
-       for ads. The person's privacy comes first when a label is doubtful. */
     /* Decides whether a screen really is a cookie or tracking consent
        screen, from the cleaned up text on it. Nothing is tapped anywhere
        else. Mentioning cookies is not enough, since recipes, news and
@@ -367,6 +361,12 @@ data class ConsentLexicon(
         return false
     }
 
+    /* True when a switch label says the switch is required for the site to
+       work, so it is left on. Two things cancel that. "Non essential" and
+       "unnecessary" describe switches to turn off. And a label that says
+       required but also names an advertising or measurement purpose is not
+       trusted, since a truly required switch does not need to say it is
+       for ads. The person's privacy comes first when a label is doubtful. */
     fun readsAsRequired(name: String): Boolean {
         if (switchNonEssentialTextPatterns.matches(name)) return false
         if (!switchEssentialTextPatterns.matches(name)) return false
@@ -452,7 +452,8 @@ data class ConsentLexicon(
    skipped on its own and never stops the others. */
 private const val LANG_DIR = "lang"
 
-private fun Context.loadLanguagePacks(): List<JSONObject> {
+/* Read once per service start and handed to both loaders below */
+fun Context.loadLanguagePacks(): List<JSONObject> {
     val names = try {
         assets.list(LANG_DIR)?.filter { it.endsWith(".json") }?.sorted()
     } catch (e: Exception) {
@@ -465,7 +466,7 @@ private fun Context.loadLanguagePacks(): List<JSONObject> {
             val pack = JSONObject(json)
             if (pack.optBoolean("enabled", true)) packs.add(pack)
         } catch (e: Exception) {
-            // A broken pack is left out.
+            // A broken pack is left out
         }
     }
     return packs
@@ -475,16 +476,15 @@ private fun List<JSONObject>.words(key: String): List<String> =
     flatMap { it.optJSONArray(key).toStringList() }
 
 /* The rule that carries the plain wording lists. Its name stays english_wording
-   because that is what tools/build_english.py writes; the language packs are
+   because that is what tools/build_english.kts writes; the language packs are
    added to it so there is still only one rule, and so one walk over the
    screen, for all languages together. */
 private const val WORDING_RULE = "english_wording"
 private const val REJECT_BUTTON_RULE = "sourcepoint_style_reject_buttons"
 
-fun Context.loadConsentRules(): List<ConsentRule> {
+fun Context.loadConsentRules(packs: List<JSONObject>): List<ConsentRule> {
     val json = assets.open("consent_rules.json").bufferedReader().use { it.readText() }
     val array = JSONArray(json)
-    val packs = loadLanguagePacks()
     val rules = mutableListOf<ConsentRule>()
 
     for (i in 0 until array.length()) {
@@ -521,11 +521,10 @@ fun Context.loadConsentRules(): List<ConsentRule> {
     return rules
 }
 
-fun Context.loadConsentLexicon(): ConsentLexicon {
+fun Context.loadConsentLexicon(packs: List<JSONObject>): ConsentLexicon {
     val json = assets.open("consent_lexicon.json").bufferedReader().use { it.readText() }
     val obj = JSONObject(json)
     val fallback = ConsentLexicon.DEFAULT
-    val packs = loadLanguagePacks()
 
     /* A missing or empty list in the file falls back to the built in
        wording for that one list, so a half edited file never leaves the
@@ -581,8 +580,6 @@ private fun JSONArray?.toStringList(): List<String> {
     return list
 }
 
-private fun JSONArray?.toPatternList(): PatternList = PatternList(toStringList())
-
 /* What judgeScreen found. acceptButton is kept because the last resort
    reject words (decline, deny, refuse) are only tried on screens that also
    have an accept everything button, the way a real banner does. The other
@@ -598,7 +595,7 @@ data class ScreenEvidence(
        (a "pay or okay" wall). There is nothing to tap there, so the service
        stops looking instead of retrying for a long time. */
     val cookieWall: Boolean = false,
-    /* A card, bank or payment entry screen. Never acted on. */
+    /* A card, bank or payment entry screen. Never acted on */
     val sensitive: Boolean = false
 )
 

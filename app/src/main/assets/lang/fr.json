@@ -22,7 +22,6 @@
   "je n accepte pas",
   "ne pas accepter",
   "ne pas consentir",
-  "retirer mon consentement",
   "non merci",
   "tout desactiver",
   "tout bloquer",
@@ -38,7 +37,14 @@
   "=non",
   "=je m oppose",
   "=s opposer",
-  "=tout desactiver"
+  "=tout desactiver",
+  "tout deselectionner",
+  "tout decocher",
+  "=interdire",
+  "tout interdire",
+  "je naccepte rien",
+  "je desactive tout",
+  "=je desactive"
  ],
  "necessary": [
   "uniquement les cookies necessaires",
@@ -66,7 +72,12 @@
   "=necessaires uniquement",
   "=essentiels uniquement",
   "=accepter les necessaires",
-  "=cookies fonctionnels uniquement"
+  "=cookies fonctionnels uniquement",
+  "uniquement les cookies",
+  "accepter uniquement",
+  "que les cookies techniques",
+  "que les cookies necessaires",
+  "que les cookies essentiels"
  ],
  "manage": [
   "gerer les preferences",
@@ -272,7 +283,9 @@
   "annuel",
   "passer a premium",
   "commander",
-  "premium"
+  "premium",
+  "sabonner",
+  "je mabonne"
  ],
  "acceptGuard": [
   "tout accepter",
@@ -312,7 +325,16 @@
   "=j ai compris",
   "=activer",
   "=tout",
-  "=poursuivre"
+  "=poursuivre",
+  "accepter et soutenir",
+  "accepter and soutenir",
+  "=jaccepte",
+  "oui jaccepte",
+  "=daccord",
+  "fermer et accepter",
+  "fermer and accepter",
+  "continuer et accepter",
+  "continuer and accepter"
  ],
  "acceptWords": [
   "accept*",

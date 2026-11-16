@@ -22,7 +22,6 @@
   "no consentir",
   "no estoy de acuerdo",
   "retirar mi consentimiento",
-  "revocar consentimiento",
   "no gracias",
   "desactivar todo",
   "desactivar todas",
@@ -39,7 +38,9 @@
   "=no",
   "=me opongo",
   "=oponerse",
-  "=no aceptar"
+  "=no aceptar",
+  "deseleccionar todo",
+  "no permitir"
  ],
  "necessary": [
   "solo las necesarias",
@@ -74,7 +75,14 @@
   "=solo esenciales",
   "=aceptar necesarias",
   "=solo las necesarias",
-  "=solo funcionales"
+  "=solo funcionales",
+  "solo cookies tecnicas",
+  "solo las cookies tecnicas",
+  "usar solo",
+  "solo cookies propias",
+  "aceptar solo",
+  "solo las cookies estrictamente necesarias",
+  "solo las estrictamente necesarias"
  ],
  "manage": [
   "gestionar preferencias",
@@ -325,7 +333,10 @@
   "=entiendo",
   "=activar",
   "=todo",
-  "=seguir"
+  "=seguir",
+  "accede gratis",
+  "acceder gratis",
+  "aceptar gratis"
  ],
  "acceptWords": [
   "acept*",

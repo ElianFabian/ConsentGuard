@@ -70,10 +70,10 @@
   "=an gama"
  ],
  "fallbackReject": [
-  "ki",
   "=aa",
   "=aa na gode",
-  "=ba na yarda"
+  "=ba na yarda",
+  "=ki"
  ],
  "rejectButton": [
   "=ki",

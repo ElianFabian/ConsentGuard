@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ConsentBlocker"
+rootProject.name = "ConsentGuard"
 include(":app")

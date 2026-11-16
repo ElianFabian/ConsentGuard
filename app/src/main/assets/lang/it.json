@@ -17,8 +17,6 @@
   "non accettare",
   "non acconsento",
   "non sono d accordo",
-  "revoca il consenso",
-  "ritira il consenso",
   "no grazie",
   "disattiva tutto",
   "blocca tutto",
@@ -32,7 +30,13 @@
   "=nega",
   "=no",
   "=non acconsento",
-  "=mi oppongo"
+  "=mi oppongo",
+  "nega il consenso",
+  "non acconsentire",
+  "deseleziona tutto",
+  "rifiut",
+  "blocca i cookie",
+  "senza accettare"
  ],
  "necessary": [
   "solo necessari",
@@ -59,7 +63,11 @@
   "=essenziali",
   "=solo necessari",
   "=solo essenziali",
-  "=solo tecnici"
+  "=solo tecnici",
+  "accetta solo",
+  "solo i cookie tecnici",
+  "solo i cookie strettamente necessari",
+  "solo cookie strettamente necessari"
  ],
  "manage": [
   "gestisci preferenze",
@@ -265,7 +273,9 @@
   "=ho capito",
   "=continua",
   "=attiva",
-  "=tutto"
+  "=tutto",
+  "=acconsenti",
+  "acconsenti a tutto"
  ],
  "acceptWords": [
   "accett*",

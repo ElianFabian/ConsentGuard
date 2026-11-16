@@ -2,13 +2,20 @@ package dev.macbuildssys.consentguard
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.content.ComponentName
+import android.content.Context
 import android.graphics.Path
+import android.graphics.Point
 import android.graphics.Rect
+import android.hardware.display.DisplayManager
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Process
 import android.os.SystemClock
+import android.provider.Settings
+import android.text.TextUtils
 import android.util.Log
+import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import java.util.concurrent.atomic.AtomicBoolean
@@ -145,7 +152,7 @@ class ConsentBlockerService : AccessibilityService() {
        is left alone. Empty when no accept button was seen. */
     private var acceptRects: List<Rect> = emptyList()
 
-    /* State for the plus and minus buttons (see handleMinusButtons). */
+    /* State for the plus and minus buttons (see handleMinusButtons) */
     private var minusClickedCount = 0
     private var minusScrollAttempts = 0
     private var minusLimitHit = false
@@ -154,15 +161,6 @@ class ConsentBlockerService : AccessibilityService() {
        Used with isTopLevelTarget, see below. */
     private var topLevelRejectPatterns: List<PatternList> = emptyList()
 
-    /* Self scheduling backup: after any successful action, checks again a
-       short while later regardless of whether a new accessibility event
-       arrives. Needed because a single toggle flip may not reliably
-       trigger a fresh content changed notification from the OS, observed
-       in practice as the service going silent for a full minute after
-       successfully clicking one toggle, with no further events at all
-       for that screen. Purely a backup: real accessibility events still
-       drive things immediately when they do arrive; this just stops the
-       whole sequence from stalling silently when they don't. */
     /* All of the work happens on one background thread, not on the main
        thread. Reading a screen means asking the app that owns it for every
        node, one at a time, and on a long page that can take a good fraction
@@ -176,7 +174,7 @@ class ConsentBlockerService : AccessibilityService() {
     private lateinit var handler: Handler
     private var pendingFollowUp: Runnable? = null
 
-    /* Event throttling, see requestScan. */
+    /* Event throttling, see requestScan */
     private val scanPending = AtomicBoolean(false)
     @Volatile private var lastEventPackage: String? = null
 
@@ -190,7 +188,11 @@ class ConsentBlockerService : AccessibilityService() {
     private var tickCount = 0
     private var truncated = false
 
-    /* The apps the person asked to skip, parsed once per change. */
+    /* The full size of the display, read at the start of every scan, see
+       refreshScreenSize. */
+    private val screen = Point()
+
+    /* The apps the person asked to skip, parsed once per change */
     private var skippedRaw = ""
     private var skippedNames: Set<String> = emptySet()
     private val labelCache = HashMap<String, String>()
@@ -210,8 +212,9 @@ class ConsentBlockerService : AccessibilityService() {
     }
 
     private fun loadWording() {
+        val packs = loadLanguagePacks()
         rules = try {
-            loadConsentRules()
+            loadConsentRules(packs)
         } catch (e: Exception) {
             debugLog("Failed to load consent_rules.json" + " (" + e.message + ")")
             emptyList()
@@ -223,9 +226,9 @@ class ConsentBlockerService : AccessibilityService() {
         }.filter { it.isNotBlank() }
         topLevelRejectPatterns = rules.flatMap { listOf(it.rejectTextPatterns, it.necessaryTextPatterns) }
             .filter { !it.isEmpty() }
-        forgetOldHistory()
+        forgetOldHistory(this)
         lexicon = try {
-            loadConsentLexicon()
+            loadConsentLexicon(packs)
         } catch (e: Exception) {
             debugLog("Failed to load consent_lexicon.json, using built in wording" + " (" + e.message + ")")
             ConsentLexicon.DEFAULT
@@ -296,14 +299,6 @@ class ConsentBlockerService : AccessibilityService() {
         }
     }
 
-    /* Gate everything below on the screen actually looking like a consent
-       dialog. Individual button and menu phrases keep colliding with
-       ordinary Android UI (we've hit this twice already), so instead of
-       chasing each collision one at a time, nothing gets clicked at all
-       unless the screen also contains one of these consent or privacy
-       specific phrases. Real IAB TCF style banners are full of this
-       exact boilerplate; system settings, launchers, and ordinary apps
-       never say "legitimate interest" or "list of partners". */
     /* ConsentGuard never acts inside itself, and never in parts of the phone
        itself: system screens, settings, permission and install dialogs, the
        launcher, the dialer and the keyboard. */
@@ -366,7 +361,7 @@ class ConsentBlockerService : AccessibilityService() {
         }
         acceptRects = acceptList
 
-        val screenHeight = resources.displayMetrics.heightPixels
+        val screenHeight = screen.y
         judge.buttonsClose = acceptList.any { accept ->
             choiceList.any { Math.abs(accept.centerY() - it.centerY()) <= screenHeight * BANNER_SPAN }
         }
@@ -397,7 +392,26 @@ class ConsentBlockerService : AccessibilityService() {
         return true
     }
 
-    /* The quick settings tile sets this to a time a few minutes ahead. */
+    /* The whole display, in the coordinates getBoundsInScreen and
+       dispatchGesture use. The service's own display metrics can leave out
+       the navigation bar, which made a button at the very bottom of a full
+       screen app (a game showing its consent form, say) count as off screen
+       and never be tapped. Rotation is picked up because this runs before
+       every scan. */
+    @Suppress("DEPRECATION")
+    private fun refreshScreenSize() {
+        try {
+            getSystemService(DisplayManager::class.java)?.getDisplay(Display.DEFAULT_DISPLAY)?.getRealSize(screen)
+        } catch (e: Exception) {
+            screen.set(0, 0)
+        }
+        if (screen.x <= 0 || screen.y <= 0) {
+            val metrics = resources.displayMetrics
+            screen.set(metrics.widthPixels, metrics.heightPixels)
+        }
+    }
+
+    /* The quick settings tile sets this to a time a few minutes ahead */
     private fun isPaused(): Boolean {
         val until = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getLong(KEY_PAUSED_UNTIL, 0L)
         return until > System.currentTimeMillis()
@@ -431,17 +445,31 @@ class ConsentBlockerService : AccessibilityService() {
         return SafeZoneWords.fold(label) in skippedNames
     }
 
-    /* Earlier versions kept a short list of recent results and some
-       counters. Nothing is kept any more, and this clears whatever an
-       older version left behind. */
-    private fun forgetOldHistory() {
-        val editor = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
-        LEGACY_HISTORY_KEYS.forEach { editor.remove(it) }
-        editor.apply()
-    }
-
+    /* Gate everything below on the screen actually looking like a consent
+       dialog. Individual button and menu phrases keep colliding with
+       ordinary Android UI (we've hit this twice already), so instead of
+       chasing each collision one at a time, nothing gets clicked at all
+       unless the screen also contains one of these consent or privacy
+       specific phrases. Real IAB TCF style banners are full of this
+       exact boilerplate; system settings, launchers, and ordinary apps
+       never say "legitimate interest" or "list of partners". */
     private fun hasConsentAnchor(root: AccessibilityNodeInfo): Boolean {
         return findNodeByText(root, lexicon.anchorTextPatterns) != null
+    }
+
+    /* Times every scan, so a debug log shows where the time goes */
+    private fun scanAndAct(root: AccessibilityNodeInfo, packageName: String) {
+        val started = System.nanoTime()
+        scanDeadline = started + SCAN_BUDGET_MS * 1_000_000L
+        tickCount = 0
+        truncated = false
+        refreshScreenSize()
+        try {
+            scanAndActInner(root, packageName)
+        } finally {
+            val ms = (System.nanoTime() - started) / 1_000_000
+            if (BuildConfig.DEBUG && ms >= SLOW_SCAN_MS) debugLog("Scan took $ms ms in $packageName")
+        }
     }
 
     /* Tries every rule's reject option first, then every rule's necessary
@@ -452,20 +480,6 @@ class ConsentBlockerService : AccessibilityService() {
        extra state: the manage click just opens a new window, which
        triggers a fresh event and a fresh pass that finds the reject
        button on the next screen. */
-    /* Times every scan, so a debug log shows where the time goes. */
-    private fun scanAndAct(root: AccessibilityNodeInfo, packageName: String) {
-        val started = System.nanoTime()
-        scanDeadline = started + SCAN_BUDGET_MS * 1_000_000L
-        tickCount = 0
-        truncated = false
-        try {
-            scanAndActInner(root, packageName)
-        } finally {
-            val ms = (System.nanoTime() - started) / 1_000_000
-            if (BuildConfig.DEBUG && ms >= SLOW_SCAN_MS) debugLog("Scan took $ms ms in $packageName")
-        }
-    }
-
     private fun scanAndActInner(root: AccessibilityNodeInfo, packageName: String) {
         /* Checked here as well as when an event arrives, because the follow
            up scans call this directly and whatever is on screen by then may
@@ -666,11 +680,6 @@ class ConsentBlockerService : AccessibilityService() {
         genericExpandTries.clear()
     }
 
-    /* Clicks one not yet handled toggle if a visible one exists. If none
-       are visible, scrolls the list to reveal more, up to a bounded
-       number of attempts. Once nothing is left to toggle and scrolling
-       makes no more progress, runs one verification pass, then clicks
-       the confirm button and resets session state. */
     /* What the panel looked like at the last scroll. Scrolling a web panel
        reports success even at the very end, so without this a panel that has
        nothing more below kept being scrolled over and over, which looked like
@@ -682,7 +691,7 @@ class ConsentBlockerService : AccessibilityService() {
        the latest look at the screen. Stops the panel being saved. */
     private var toggleStuck = 0
 
-    /* Set by findUntoggledSwitch to the key the click is counted under. */
+    /* Set by findUntoggledSwitch to the key the click is counted under */
     private var lastToggleKey: String? = null
 
     private fun screenSignature(root: AccessibilityNodeInfo): Int {
@@ -716,6 +725,11 @@ class ConsentBlockerService : AccessibilityService() {
         return same
     }
 
+    /* Clicks one not yet handled toggle if a visible one exists. If none
+       are visible, scrolls the list to reveal more, up to a bounded
+       number of attempts. Once nothing is left to toggle and scrolling
+       makes no more progress, runs one verification pass, then clicks
+       the confirm button and resets session state. */
     private fun handleToggleScreen(root: AccessibilityNodeInfo, packageName: String, rule: ConsentRule): Boolean {
         resetSessionStateIfNewPackage(packageName)
 
@@ -783,8 +797,13 @@ class ConsentBlockerService : AccessibilityService() {
                 val scrolledBack = scrollBack.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
                 debugLog("Verification scroll back in $packageName: performed=$scrolledBack")
                 if (scrolledBack) {
+                    /* Same as a forward scroll: nothing is tapped until it has
+                       settled, and the next look is booked here, since a
+                       scroll may not send any event of its own. */
+                    lastScrollTime = System.currentTimeMillis()
                     verifyScrollBackAttempts++
                     emptyScanRetries = 0
+                    scheduleFollowUpScan(packageName, SCROLL_SETTLE_MS + 50)
                     return true
                 }
             }
@@ -793,6 +812,7 @@ class ConsentBlockerService : AccessibilityService() {
             lastScrollSignature = 0
             scrollAttempts = 0
             emptyScanRetries = 0
+            scheduleFollowUpScan(packageName, FOLLOW_UP_DELAY_MS)
             return true
         }
 
@@ -910,6 +930,7 @@ class ConsentBlockerService : AccessibilityService() {
             val clicked = clickNode(reject, packageName, "${rule.name}:reject:$rejectButtonsClickedThisSession")
             if (clicked) {
                 rejectButtonsClickedThisSession++
+                lastScrollSignature = 0
                 scrollAttempts = 0
                 scrollLimitHit = false
                 emptyScanRetries = 0
@@ -926,6 +947,7 @@ class ConsentBlockerService : AccessibilityService() {
             val clicked = clickNode(expandable, packageName, "${rule.name}:expand:$label")
             if (clicked) {
                 expandedSections.add(label)
+                lastScrollSignature = 0
                 scrollAttempts = 0
                 scrollLimitHit = false
                 emptyScanRetries = 0
@@ -935,7 +957,13 @@ class ConsentBlockerService : AccessibilityService() {
 
         debugLog("No visible reject button or unexpanded section in $packageName (scrollAttempts=$scrollAttempts)")
         val scrollable = findScrollable(root)
-        if (scrollable != null && scrollAttempts < MAX_SCROLL_ATTEMPTS) {
+        /* A web panel reports a scroll as done even when it is already at the
+           bottom. Without this check the panel was scrolled until the limit
+           ran out, which then counted as "too long to check" and the choices
+           were never saved, even though every Reject button had been pressed. */
+        val atEnd = scrollable != null && scrollReachedEnd(root)
+        if (atEnd) debugLog("The panel in $packageName did not move on the last scroll, end reached")
+        if (scrollable != null && !atEnd && scrollAttempts < MAX_SCROLL_ATTEMPTS) {
             val scrolled = scrollable.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
             debugLog("Scroll attempt in $packageName: performed=$scrolled")
             if (scrolled) {
@@ -945,7 +973,7 @@ class ConsentBlockerService : AccessibilityService() {
                 scheduleFollowUpScan(packageName, SCROLL_SETTLE_MS + 50)
                 return true
             }
-        } else {
+        } else if (!atEnd) {
             debugLog("No scrollable found or attempts exhausted in $packageName")
             if (scrollable != null) scrollLimitHit = true
         }
@@ -1040,10 +1068,10 @@ class ConsentBlockerService : AccessibilityService() {
         return false
     }
 
-    /* The minus buttons on screen, from the top of the page down. */
+    /* The minus buttons on screen, from the top of the page down */
     private fun collectMinusButtons(root: AccessibilityNodeInfo): List<AccessibilityNodeInfo> {
         val result = ArrayList<AccessibilityNodeInfo>()
-        val screenHeight = resources.displayMetrics.heightPixels
+        val screenHeight = screen.y
         val stack = ArrayDeque<AccessibilityNodeInfo>()
         stack.addLast(root)
         var visited = 0
@@ -1250,7 +1278,7 @@ class ConsentBlockerService : AccessibilityService() {
                 return true
             }
         } else if (scrollable != null && !genericAtEnd) {
-            /* Ran out of scrolls with more panel possibly still below. */
+            /* Ran out of scrolls with more panel possibly still below */
             genericLimitHit = true
         }
 
@@ -1263,8 +1291,9 @@ class ConsentBlockerService : AccessibilityService() {
             if (back != null && !genericBackAtTop && genericVerifyBackAttempts < MAX_SCROLL_ATTEMPTS) {
                 val scrolledBack = back.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
                 if (scrolledBack) {
+                    lastScrollTime = System.currentTimeMillis()
                     genericVerifyBackAttempts++
-                    scheduleFollowUpScan(packageName, FOLLOW_UP_DELAY_MS)
+                    scheduleFollowUpScan(packageName, SCROLL_SETTLE_MS + 50)
                     return true
                 }
             }
@@ -1424,7 +1453,7 @@ class ConsentBlockerService : AccessibilityService() {
         return null
     }
 
-    /* Walks up from a node to the nearest container that scrolls. */
+    /* Walks up from a node to the nearest container that scrolls */
     private fun findScrollableAncestor(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
         var current: AccessibilityNodeInfo? = node.parent
         var depth = 0
@@ -1729,7 +1758,7 @@ class ConsentBlockerService : AccessibilityService() {
         queue.add(root)
         var best: AccessibilityNodeInfo? = null
         var bestScore = -1
-        val screenHeight = resources.displayMetrics.heightPixels
+        val screenHeight = screen.y
 
         while (queue.isNotEmpty() && !outOfBudget()) {
             val node = queue.removeFirst()
@@ -1857,16 +1886,6 @@ class ConsentBlockerService : AccessibilityService() {
         return false
     }
 
-    /* Simulates an actual finger tap at the node's on screen coordinates,
-       rather than asking the accessibility framework to simulate a
-       click. This matters in practice: ACTION_CLICK on the Funding
-       Choices toggle switches was accepted (performAction returned
-       true, logged as success) but did nothing visible, because those
-       switches are custom WebView rendered widgets wired to real touch
-       and pointer events rather than a generic click handler. A
-       synthesized touch is indistinguishable from a real finger tap at
-       the input level, so it triggers whatever the widget is actually
-       listening for. */
     /* Presses the node itself, or the nearest thing around it that can be
        pressed (the text inside a button is not the button). */
     private fun clickWithAction(node: AccessibilityNodeInfo): Boolean {
@@ -1880,6 +1899,16 @@ class ConsentBlockerService : AccessibilityService() {
         return false
     }
 
+    /* Simulates an actual finger tap at the node's on screen coordinates,
+       rather than asking the accessibility framework to simulate a
+       click. This matters in practice: ACTION_CLICK on the Funding
+       Choices toggle switches was accepted (performAction returned
+       true, logged as success) but did nothing visible, because those
+       switches are custom WebView rendered widgets wired to real touch
+       and pointer events rather than a generic click handler. A
+       synthesized touch is indistinguishable from a real finger tap at
+       the input level, so it triggers whatever the widget is actually
+       listening for. */
     private fun clickNode(node: AccessibilityNodeInfo, packageName: String, ruleLabel: String): Boolean {
         val key = "$packageName:$ruleLabel"
         val now = System.currentTimeMillis()
@@ -1896,8 +1925,8 @@ class ConsentBlockerService : AccessibilityService() {
         val bounds = Rect()
         node.getBoundsInScreen(bounds)
         if (bounds.isEmpty) return false
-        val screenWidth = resources.displayMetrics.widthPixels
-        val screenHeight = resources.displayMetrics.heightPixels
+        val screenWidth = screen.x
+        val screenHeight = screen.y
         if (bounds.centerX() < 0 || bounds.centerY() < 0 ||
             bounds.centerX() > screenWidth || bounds.centerY() > screenHeight
         ) {
@@ -1917,7 +1946,7 @@ class ConsentBlockerService : AccessibilityService() {
             return false
         }
 
-        /* Plain buttons are capped, see labelClickCounts. */
+        /* Plain buttons are capped, see labelClickCounts */
         val isPlainButton = PLAIN_BUTTON_SUFFIXES.any { ruleLabel.endsWith(it) }
         val countKey = "$packageName|$ruleLabel|$nodeText"
         if (isPlainButton) {
@@ -1954,6 +1983,14 @@ class ConsentBlockerService : AccessibilityService() {
             /* A press by action is checked quickly: if the button is still
                there shortly after, the tap by screen position follows,
                instead of waiting out the full pause. */
+            /* Every switch and every button gets its own key here, so on a
+               phone that runs for weeks the map would only ever grow. Keys
+               older than the pause are worthless, so they are dropped once
+               the map gets big. */
+            if (recentActions.size >= MAX_RECENT_ACTIONS) {
+                recentActions.entries.removeAll { now - it.value >= DEBOUNCE_MS }
+                if (recentActions.size >= MAX_RECENT_ACTIONS) recentActions.clear()
+            }
             recentActions[key] = if (pressedByAction) now - (DEBOUNCE_MS - ACTION_RETRY_MS) else now
             lastActionTime = now
             if (isPlainButton) {
@@ -1973,6 +2010,15 @@ class ConsentBlockerService : AccessibilityService() {
         return dispatched
     }
 
+    /* Self scheduling backup: after any successful action, checks again a
+       short while later regardless of whether a new accessibility event
+       arrives. Needed because a single toggle flip may not reliably
+       trigger a fresh content changed notification from the OS, observed
+       in practice as the service going silent for a full minute after
+       successfully clicking one toggle, with no further events at all
+       for that screen. Purely a backup: real accessibility events still
+       drive things immediately when they do arrive; this just stops the
+       whole sequence from stalling silently when they don't. */
     /* Fetches a fresh window snapshot at execution time rather than
        reusing the one captured when scheduled, since an
        AccessibilityNodeInfo can go stale once the underlying view
@@ -2032,7 +2078,7 @@ class ConsentBlockerService : AccessibilityService() {
         }
     }
 
-    /* The fail closed stop. The panel is left unsaved on purpose. */
+    /* The fail closed stop. The panel is left unsaved on purpose */
     private fun stopWithoutSaving(packageName: String, reason: String) {
         debugLog("Session NOT SAVED in $packageName: $reason. Left unconfirmed on purpose.")
     }
@@ -2040,6 +2086,31 @@ class ConsentBlockerService : AccessibilityService() {
     companion object {
         const val TAG = "ConsentBlocker"
         const val PREFS_NAME = "consent_blocker_prefs"
+
+        /* Whether the person has switched the service on in the accessibility
+           settings. Shared by the main screen and the quick settings tile. */
+        fun isEnabled(context: Context): Boolean {
+            val expected = ComponentName(context, ConsentBlockerService::class.java)
+            val enabled = Settings.Secure.getString(
+                context.contentResolver,
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+            ) ?: return false
+            val splitter = TextUtils.SimpleStringSplitter(':')
+            splitter.setString(enabled)
+            while (splitter.hasNext()) {
+                if (ComponentName.unflattenFromString(splitter.next()) == expected) return true
+            }
+            return false
+        }
+
+        /* Earlier versions kept a short list of recent results and some
+           counters. Nothing is kept any more, and this clears whatever an
+           older version left behind. */
+        fun forgetOldHistory(context: Context) {
+            val editor = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            LEGACY_HISTORY_KEYS.forEach { editor.remove(it) }
+            editor.apply()
+        }
 
         /* Keys older versions used for their result list and for the cover
            panel setting. Only used to delete them. */
@@ -2077,24 +2148,24 @@ class ConsentBlockerService : AccessibilityService() {
         val MINUS_LABELS = setOf("-", "\u2212", "\u2013", "\u2012", "\uFF0D", "minus")
         val PLUS_LABELS = setOf("+", "\uFF0B", "plus")
 
-        /* Most collapsed sections opened in one panel. */
+        /* Most collapsed sections opened in one panel */
         const val MAX_SECTION_EXPANSIONS = 80
 
-        /* How long after a scroll of ours nothing is tapped. */
+        /* How long after a scroll of ours nothing is tapped */
         const val SCROLL_SETTLE_MS = 500L
 
         /* How many scans in a row wait for a reject option that is on the
            page but not tappable yet. */
         const val MAX_WAIT_FOR_TARGET = 8
 
-        /* A scan that takes longer than this is written to the debug log. */
+        /* A scan that takes longer than this is written to the debug log */
         const val SLOW_SCAN_MS = 50
 
         /* How soon after pressing a button by action the app checks whether
            it worked, and falls back to a tap by position if it did not. */
         const val ACTION_RETRY_MS = 450L
 
-        /* Most nodes looked at when judging one screen. */
+        /* Most nodes looked at when judging one screen */
         const val MAX_SCREEN_NODES = 20000
         /* Timing. These are kept short so a banner is gone quickly. The
            pause after a tap only has to be long enough for the page to
@@ -2102,6 +2173,7 @@ class ConsentBlockerService : AccessibilityService() {
            screen. Switches inside one panel do not move around, so they
            can follow each other quickly too. */
         const val DEBOUNCE_MS = 800L
+        const val MAX_RECENT_ACTIONS = 500
         const val ACTION_COOLDOWN_MS = 180L
         const val FOLLOW_UP_DELAY_MS = 200L
         const val TOGGLE_STEP_DELAY_MS = 300L
@@ -2123,7 +2195,7 @@ class ConsentBlockerService : AccessibilityService() {
         const val KEY_PAUSED_UNTIL = "paused_until"
         const val PAUSE_MS = 5 * 60 * 1000L
 
-        /* App names the person asked to skip, one per line. */
+        /* App names the person asked to skip, one per line */
         const val KEY_SKIPPED_APPS = "skipped_apps"
 
         /* How events become scans, see requestScan. A scan never starts sooner
@@ -2135,7 +2207,7 @@ class ConsentBlockerService : AccessibilityService() {
         const val ACTIVE_SCAN_GAP_MS = 80L
         const val IDLE_SCAN_GAP_MS = 250L
 
-        /* The most time one scan may spend reading the screen. */
+        /* The most time one scan may spend reading the screen */
         const val SCAN_BUDGET_MS = 400L
 
         /* Timing for the generic switch handler, same pace as the

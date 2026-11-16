@@ -64,10 +64,10 @@
   "=emechaala"
  ],
  "fallbackReject": [
-  "ju",
   "=mba",
   "=mba daalu",
-  "=ekwena"
+  "=ekwena",
+  "=ju"
  ],
  "rejectButton": [
   "=ju",

@@ -24,8 +24,8 @@ import java.text.Normalizer
    skipped.
 
    To add one, put it in the right list and run
-   python3 tools/check_safe_zone.py. Words are written in lowercase without
-   accents. */
+   kotlinc -script tools/check_safe_zone.kts. Words are written in lowercase
+   without accents. */
 object SafeZoneWords {
 
     val BROWSER_WORDS = listOf(
@@ -48,7 +48,7 @@ object SafeZoneWords {
     val BANK_PARTS: List<String> = listOf(
         "banca", "banco", "bank", "banka", "bankas", "bankasi", "banki", "banque", "benki",
         "fintech", "microfinance", "neobank", "ngan hang", "pank", "raiffeisen", "sacco",
-        "spaarbank", "sparekasse", "sparkasse", "volksbank", "банк", "בנק", "بانك", "بانک", "بنك",
+        "spaarbank", "sparekasse", "sparkasse", "volksbank", "банк", "בנק", "بانك", "بانک", "بنك", "뱅크", "뱅킹",
         "बैंक", "ব্যাংক", "ธนาคาร", "ባንክ", "銀行", "银行", "은행"
     )
 
@@ -133,7 +133,9 @@ object SafeZoneWords {
     )
 
     /* Lowercase, accents removed, anything that is not a letter or digit
-       turned into a space. "M-PESA" becomes "m pesa". */
+       turned into a space. "M-PESA" becomes "m pesa". The result is composed
+       again at the end, because taking a Korean word apart into its letters
+       and leaving it that way meant "은행" (bank) never matched anything. */
     fun fold(text: String): String {
         val d = Normalizer.normalize(text.lowercase(), Normalizer.Form.NFD)
         val sb = StringBuilder(d.length)
@@ -148,8 +150,17 @@ object SafeZoneWords {
                 lastSpace = true
             }
         }
-        return sb.toString().trim()
+        return Normalizer.normalize(sb.toString().trim(), Normalizer.Form.NFC)
     }
+
+    /* The word lists go through the same folding as the app names they are
+       compared with. Without it a word such as "बैंक" (Hindi) or "ব্যাংক"
+       (Bengali), whose vowel signs the folding drops from the app name,
+       could never be found. */
+    private val foldedBankParts by lazy { BANK_PARTS.map { fold(it) } }
+    private val foldedMoneyWords by lazy { MONEY_WORDS.map { fold(it) } }
+    private val foldedMessageWords by lazy { MESSAGE_WORDS.map { fold(it) } }
+    private val foldedBrands by lazy { BRANDS.map { fold(it) } }
 
     fun matchesPackage(packageName: String): Boolean {
         val lower = packageName.lowercase()
@@ -162,11 +173,11 @@ object SafeZoneWords {
         val f = fold(label)
         if (isMailDotCom("", label)) return false
         if (f.isEmpty()) return false
-        if (BANK_PARTS.any { f.contains(it) }) return true
+        if (foldedBankParts.any { f.contains(it) }) return true
         val padded = " $f "
-        if (MONEY_WORDS.any { padded.contains(" $it ") }) return true
-        if (MESSAGE_WORDS.any { padded.contains(" $it ") }) return true
-        return BRANDS.any { padded.contains(" $it ") }
+        if (foldedMoneyWords.any { padded.contains(" $it ") }) return true
+        if (foldedMessageWords.any { padded.contains(" $it ") }) return true
+        return foldedBrands.any { padded.contains(" $it ") }
     }
 
     /* Email and chat apps are left alone too. The one exception is mail.com,
@@ -190,7 +201,7 @@ object SafeZoneWords {
         val low = packageName.lowercase()
         if (MESSAGING_PACKAGES.any { low == it || low.startsWith("$it.") }) return true
         val padded = " " + fold(label) + " "
-        return MESSAGE_WORDS.any { padded.contains(" $it ") }
+        return foldedMessageWords.any { padded.contains(" $it ") }
     }
 
     private val cache = HashMap<String, Boolean>()

@@ -27,11 +27,9 @@
   "ohne tracking fortfahren",
   "tracking ablehnen",
   "marketing ablehnen",
-  "einwilligung widerrufen",
   "nein danke",
   "alle deaktivieren",
   "alle ausschalten",
-  "nur das notigste",
   "=ablehnen",
   "=verweigern",
   "=zuruckweisen",
@@ -40,7 +38,28 @@
   "=alle widersprechen",
   "=ich widerspreche",
   "=nicht einwilligen",
-  "=keine zustimmung"
+  "=keine zustimmung",
+  "nicht einwilligen",
+  "einwilligung verweigern",
+  "zustimmung verweigern",
+  "weiter ohne einwilligung",
+  "ohne einwilligung fortfahren",
+  "ohne einwilligung weiter",
+  "ablehnen und schließen",
+  "ablehnen and schließen",
+  "ablehnen und weiter",
+  "ablehnen and weiter",
+  "alle abwahlen",
+  "alles abwahlen",
+  "optionale ablehnen",
+  "alle zwecke ablehnen",
+  "=nicht erlauben",
+  "=nicht zulassen",
+  "ohne zustimmung",
+  "ohne einwilligung",
+  "ohne akzeptieren",
+  "ohne annahme",
+  "nein bitte nicht"
  ],
  "necessary": [
   "nur notwendige",
@@ -76,7 +95,15 @@
   "=technisch notwendige",
   "=notwendige akzeptieren",
   "=notwendige zulassen",
-  "=nur funktionale"
+  "=nur funktionale",
+  "nur das notigste",
+  "nur notwendige verwenden",
+  "nur essenzielle verwenden",
+  "erforderliche cookies zulassen",
+  "notwendige cookies zulassen",
+  "mit erforderlichen einstellungen fortfahren",
+  "lediglich notwendige",
+  "lediglich erforderliche"
  ],
  "manage": [
   "einstellungen verwalten",
@@ -257,7 +284,10 @@
   "besondere zwecke",
   "besondere funktionen",
   "tracking technologien",
-  "drittanbieter"
+  "drittanbieter",
+  "prazise standortdaten",
+  "gerateeigenschaften",
+  "ihre daten verwalten"
  ],
  "neverClick": [
   "abonnieren",
@@ -291,7 +321,9 @@
   "upgrade",
   "zur kasse",
   "bestellen",
-  "premium"
+  "premium",
+  "contentpass",
+  "freechoice"
  ],
  "acceptGuard": [
   "alle akzeptieren",
@@ -344,7 +376,23 @@
   "=fortfahren",
   "=alles klar",
   "=alle",
-  "=aktivieren"
+  "=aktivieren",
+  "=einwilligen",
+  "in alle einwilligen",
+  "allem zustimmen",
+  "=einwilligung erteilen",
+  "einwilligen und weiter",
+  "einwilligen and weiter",
+  "einwilligen und schließen",
+  "einwilligen and schließen",
+  "mit werbung lesen",
+  "mit werbung weiterlesen",
+  "mit werbung nutzen",
+  "mit werbung fortfahren",
+  "weiter mit werbung",
+  "empfohlene cookies zulassen",
+  "=zustimmung",
+  "=einwilligung"
  ],
  "acceptWords": [
   "akzept*",

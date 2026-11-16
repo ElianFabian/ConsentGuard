@@ -29,4 +29,6 @@ Thumbs.db
 # Misc
 *.log
 *.hprof
+
+# Test pages
 testpages/

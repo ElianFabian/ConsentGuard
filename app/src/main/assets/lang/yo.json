@@ -63,10 +63,10 @@
   "=ti pari"
  ],
  "fallbackReject": [
-  "ko",
   "=rara",
   "=rara o se",
-  "=mi o gba"
+  "=mi o gba",
+  "=ko"
  ],
  "rejectButton": [
   "=ko",

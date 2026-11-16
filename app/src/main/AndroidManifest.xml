@@ -4,7 +4,7 @@
 
     <!-- ConsentGuard has no internet permission and never asks for one. This
          line also removes it if a library should ever try to add it, so the
-         app stays unable to send anything anywhere. tools/check_no_network.py
+         app stays unable to send anything anywhere. tools/check_no_network.kts
          checks the same thing on the built manifest. -->
     <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />

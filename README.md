@@ -20,7 +20,7 @@
 
 ConsentGuard is an Android accessibility service that watches the screen for cookie and tracking consent prompts and automatically rejects them.
 
-- It works in Chrome, embedded WebViews, and some native consent dialogues. What it can see varies between apps and websites.
+- It works in Chrome, embedded WebViews, and native consent dialogues such as the Google consent form many apps show. What it can see varies between apps and websites.
 - On a simple banner it taps the reject option, or the necessary only option.
 - On a banner with a long list of individual switches, it switches off the optional ones one by one, then saves if the site asks for that. Switches marked as required or essential are left on.
 - It reads banners in 17 languages at once, including German, French, Spanish, Kiswahili and several other African languages, so it also works on pages translated by the browser. See [languages](docs/LANGUAGES.md).
@@ -65,11 +65,23 @@ Once the service is on, there is nothing more to do. Browse as usual and Consent
 - To update, install the newer `ConsentGuard.apk` over the old one, then check that the service is still switched on.
 - To stop it, switch it off under **Settings > Accessibility > Installed apps > ConsentGuard**, or uninstall the app.
 
+## Building
+
+```
+./gradlew assembleRelease
+```
+
+The APK is written to `app/build/outputs/apk/release/`. It is signed when a `keystore.properties` file is present (see `app/build.gradle.kts`), and left unsigned otherwise. The build is pinned to JDK 17 in `gradle.properties`, because JDK 21 as the system default makes the Android build fail with a jlink error. Change that path if your JDK 17 lives somewhere else.
+
 ## Checking the build
 
-- `python3 tools/check_no_network.py` confirms the app asks for no network permission.
-- `python3 tools/check_languages.py` checks the language packs for clashes.
-- `python3 tools/check_safe_zone.py` checks the bank and payment list.
+The tools in `tools/` are Kotlin scripts. They need the Kotlin command line compiler, version 1.9 or later (`sudo snap install --classic kotlin` on Ubuntu, or `sdk install kotlin` with SDKMAN). Run them from anywhere inside the project.
+
+- `kotlinc -script tools/check_no_network.kts` confirms the app asks for no network permission.
+- `kotlinc -script tools/check_trust.kts` confirms the promises in [docs/PRIVACY.md](docs/PRIVACY.md) still hold in the source.
+- `kotlinc -script tools/check_languages.kts` checks the language packs for clashes.
+- `kotlinc -script tools/check_safe_zone.kts` checks the bank and payment list.
+- `kotlinc -script tools/build_english.kts` and `kotlinc -script tools/build_languages.kts` rebuild the wording in `app/src/main/assets/` after a change to the word lists.
 - The Gradle build leaves out the dependency info block, so building the same source gives the same APK.
 
 ## Best effort

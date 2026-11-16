@@ -20,8 +20,6 @@
   "nao aceitar",
   "nao aceito",
   "nao concordo",
-  "retirar o consentimento",
-  "revogar consentimento",
   "nao obrigado",
   "nao obrigada",
   "desativar tudo",
@@ -36,7 +34,10 @@
   "=negar",
   "=nao",
   "=discordo",
-  "=opor se"
+  "=opor se",
+  "nao consentir",
+  "desmarcar tudo",
+  "sem aceitar"
  ],
  "necessary": [
   "apenas necessarios",
@@ -64,7 +65,9 @@
   "=essenciais",
   "=apenas necessarios",
   "=somente necessarios",
-  "=apenas essenciais"
+  "=apenas essenciais",
+  "apenas o essencial",
+  "somente o essencial"
  ],
  "manage": [
   "gerir preferencias",

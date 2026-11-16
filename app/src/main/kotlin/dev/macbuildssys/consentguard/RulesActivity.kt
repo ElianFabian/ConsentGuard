@@ -21,8 +21,10 @@ class RulesActivity : Activity() {
     private lateinit var nameInput: AutoCompleteTextView
     private lateinit var listBox: LinearLayout
 
-    /* Home screen name of every installed app, as shown to the person. */
-    private var installedNames: List<String> = emptyList()
+    /* Home screen name of every installed app, as shown to the person. Read
+       on a background thread, since asking every app for its name can take
+       long enough on a full phone to freeze the screen. Null until read. */
+    @Volatile private var installedNames: List<String>? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,9 +32,6 @@ class RulesActivity : Activity() {
 
         nameInput = findViewById(R.id.appNameInput)
         listBox = findViewById(R.id.skippedAppsList)
-
-        installedNames = loadInstalledNames()
-        nameInput.setAdapter(ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, installedNames))
 
         findViewById<Button>(R.id.addAppButton).setOnClickListener { addTypedApp() }
         findViewById<Button>(R.id.showProtectedButton).setOnClickListener { showProtectedApps() }
@@ -42,17 +41,24 @@ class RulesActivity : Activity() {
         }
 
         showSkippedApps()
+        Thread {
+            val names = loadInstalledNames()
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                installedNames = names
+                nameInput.setAdapter(ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, names))
+            }
+        }.start()
     }
 
-    private fun loadInstalledNames(): List<String> {
-        val launch = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val names = HashSet<String>()
-        for (info in packageManager.queryIntentActivities(launch, 0)) {
-            if (info.activityInfo.packageName == packageName) continue
-            names.add(info.loadLabel(packageManager).toString())
-        }
-        return names.sortedBy { SafeZoneWords.fold(it) }
-    }
+    private fun launcherApps() =
+        packageManager.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0)
+            .filter { it.activityInfo.packageName != packageName }
+
+    private fun loadInstalledNames(): List<String> =
+        launcherApps().map { it.loadLabel(packageManager).toString() }
+            .toSet()
+            .sortedBy { SafeZoneWords.fold(it) }
 
     private fun savedNames(): MutableList<String> {
         val raw = getSharedPreferences(ConsentBlockerService.PREFS_NAME, MODE_PRIVATE)
@@ -71,10 +77,15 @@ class RulesActivity : Activity() {
     private fun addTypedApp() {
         val typed = nameInput.text.toString().trim()
         if (typed.isEmpty()) return
+        val installed = installedNames
+        if (installed == null) {
+            Toast.makeText(this, R.string.apps_still_loading, Toast.LENGTH_SHORT).show()
+            return
+        }
         val folded = SafeZoneWords.fold(typed)
-        val match = installedNames.firstOrNull { SafeZoneWords.fold(it) == folded }
+        val match = installed.firstOrNull { SafeZoneWords.fold(it) == folded }
         if (match == null) {
-            Toast.makeText(this, "No installed app is named \"$typed\". Pick a name from the suggestions.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.app_not_found, typed), Toast.LENGTH_LONG).show()
             return
         }
         val names = savedNames()
@@ -86,7 +97,7 @@ class RulesActivity : Activity() {
         (getSystemService(INPUT_METHOD_SERVICE) as? InputMethodManager)
             ?.hideSoftInputFromWindow(nameInput.windowToken, 0)
         showSkippedApps()
-        Toast.makeText(this, "Saved. ConsentGuard will skip $match.", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.app_saved, match), Toast.LENGTH_SHORT).show()
     }
 
     private fun showSkippedApps() {
@@ -102,7 +113,8 @@ class RulesActivity : Activity() {
             row.addView(label, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
 
             val remove = Button(this)
-            remove.text = "Remove"
+            remove.setText(R.string.remove)
+            remove.contentDescription = getString(R.string.remove_app, name)
             remove.minWidth = (104 * resources.displayMetrics.density).toInt()
             remove.setOnClickListener {
                 val names = savedNames()
@@ -121,31 +133,24 @@ class RulesActivity : Activity() {
        list is the real behaviour and not a promise. */
     private fun showProtectedApps() {
         Thread {
-            val launch = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
             val protectedNames = HashSet<String>()
             val addedByPerson = savedNames().map { SafeZoneWords.fold(it) }.toSet()
-            for (info in packageManager.queryIntentActivities(launch, 0)) {
-                val pkg = info.activityInfo.packageName
-                if (pkg == packageName) continue
+            for (info in launcherApps()) {
                 val label = info.loadLabel(packageManager).toString()
                 if (SafeZoneWords.fold(label) in addedByPerson) {
-                    protectedNames.add("$label (added by you)")
-                } else if (SafeZoneWords.isSafeZone(this, pkg)) {
+                    protectedNames.add(getString(R.string.added_by_you, label))
+                } else if (SafeZoneWords.isSafeZone(this, info.activityInfo.packageName)) {
                     protectedNames.add(label)
                 }
             }
             val sorted = protectedNames.sortedBy { SafeZoneWords.fold(it) }
             runOnUiThread {
-                if (isFinishing) return@runOnUiThread
-                val message = if (sorted.isEmpty()) {
-                    "No banking, payment, email or chat apps were found on this phone. If you have one, add it by name."
-                } else {
-                    sorted.joinToString("\n")
-                }
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                val message = if (sorted.isEmpty()) getString(R.string.no_protected_apps) else sorted.joinToString("\n")
                 AlertDialog.Builder(this)
-                    .setTitle("Never touched by ConsentGuard")
+                    .setTitle(R.string.protected_title)
                     .setMessage(message)
-                    .setPositiveButton("OK", null)
+                    .setPositiveButton(android.R.string.ok, null)
                     .show()
             }
         }.start()
