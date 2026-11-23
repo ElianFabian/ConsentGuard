@@ -1,101 +1,61 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true">
+    android:orientation="vertical">
 
-<LinearLayout
-    android:orientation="vertical"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:padding="24dp">
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/appsToolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        app:title="@string/apps_to_skip"
+        app:navigationIcon="@drawable/ic_apps_back"
+        app:navigationContentDescription="@string/apps_back" />
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textSize="18sp"
-        android:paddingBottom="12dp"
-        android:text="@string/rules_title" />
-
-    <TextView
+    <com.google.android.material.textfield.TextInputLayout
+        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#E3EEE3"
-        android:padding="14dp"
-        android:textSize="14sp"
-        android:textColor="#1B1B1B"
-        android:text="@string/protected_notice" />
-
-    <Button
-        android:id="@+id/showProtectedButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="20dp"
         android:layout_marginTop="8dp"
-        android:text="@string/show_protected" />
+        android:hint="@string/search_apps"
+        app:endIconMode="clear_text">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textSize="16sp"
-        android:paddingTop="24dp"
-        android:paddingBottom="4dp"
-        android:text="@string/skip_another" />
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/appsSearch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="text"
+            android:maxLines="1" />
+    </com.google.android.material.textfield.TextInputLayout>
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textSize="12sp"
-        android:paddingBottom="8dp"
-        android:text="@string/skip_help" />
-
-    <LinearLayout
-        android:orientation="horizontal"
+    <com.google.android.material.materialswitch.MaterialSwitch
+        android:id="@+id/appsSkippedOnly"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center_vertical">
+        android:minHeight="56dp"
+        android:layout_marginHorizontal="20dp"
+        android:text="@string/show_skipped_only" />
 
-        <AutoCompleteTextView
-            android:id="@+id/appNameInput"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:inputType="text|textNoSuggestions"
-            android:imeOptions="actionDone"
-            android:singleLine="true"
-            android:completionThreshold="1"
-            android:hint="@string/app_name_hint"
-            android:textSize="16sp" />
-
-        <Button
-            android:id="@+id/addAppButton"
-            android:minWidth="104dp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/add" />
-
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/skippedAppsList"
-        android:orientation="vertical"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:paddingTop="8dp" />
-
-    <Space
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1" />
+        android:layout_weight="1">
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center"
-        android:paddingTop="24dp"
-        android:textSize="12sp"
-        android:textColor="#757575"
-        android:text="@string/copyright_notice" />
+        <ListView
+            android:id="@+id/appsList"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:divider="?attr/colorOutlineVariant"
+            android:dividerHeight="1dp" />
 
+        <TextView
+            android:id="@+id/appsEmpty"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:padding="24dp"
+            android:textAppearance="?attr/textAppearanceBodyMedium" />
+    </FrameLayout>
 </LinearLayout>
-
-</ScrollView>

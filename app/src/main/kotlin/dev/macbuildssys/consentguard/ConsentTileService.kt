@@ -44,7 +44,7 @@ class ConsentTileService : TileService() {
             }
             isPaused() -> {
                 tile.state = Tile.STATE_INACTIVE
-                tile.label = getString(R.string.tile_label_paused)
+                tile.label = forAppLanguage().getString(R.string.tile_label_paused)
             }
             else -> {
                 tile.state = Tile.STATE_ACTIVE

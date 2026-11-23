@@ -1,53 +1,30 @@
-# ConsentGuard
-
-```
- ██████╗ ██████╗ ███╗   ██╗███████╗███████╗███╗   ██╗████████╗
-██╔════╝██╔═══██╗████╗  ██║██╔════╝██╔════╝████╗  ██║╚══██╔══╝
-██║     ██║   ██║██╔██╗ ██║███████╗█████╗  ██╔██╗ ██║   ██║
-██║     ██║   ██║██║╚██╗██║╚════██║██╔══╝  ██║╚██╗██║   ██║
-╚██████╗╚██████╔╝██║ ╚████║███████║███████╗██║ ╚████║   ██║
- ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝╚══════╝╚═╝  ╚═══╝   ╚═╝
-
- ██████╗ ██╗   ██╗ █████╗ ██████╗ ██████╗
-██╔════╝ ██║   ██║██╔══██╗██╔══██╗██╔══██╗
-██║  ███╗██║   ██║███████║██████╔╝██║  ██║
-██║   ██║██║   ██║██╔══██║██╔══██╗██║  ██║
-╚██████╔╝╚██████╔╝██║  ██║██║  ██║██████╔╝
- ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝
-```
+# CookieRejecter
 
 ## What it does
 
-ConsentGuard is an Android accessibility service that watches the screen for cookie and tracking consent prompts and automatically rejects them.
+CookieRejecter is a fork of [ConsentGuard by macbuildssys](https://github.com/macbuildssys/ConsentGuard). It detects supported cookie and tracking consent prompts and shows a floating **Reject optional choices** button. Tap it to run the refusal for that window.
 
 - It works in Chrome, embedded WebViews, and native consent dialogues such as the Google consent form many apps show. What it can see varies between apps and websites.
 - On a simple banner it taps the reject option, or the necessary only option.
-- On a banner with a long list of individual switches, it switches off the optional ones one by one, then saves if the site asks for that. Switches marked as required or essential are left on.
+- On forms with individual switches, it turns off the optional ones it can verify and prompts you before submitting. Switches marked as required or essential are left on.
 - It reads banners in 17 languages at once, including German, French, Spanish, Kiswahili and several other African languages, so it also works on pages translated by the browser. See [languages](docs/LANGUAGES.md).
 - It never accepts. On a screen that offers only accept or pay, it does nothing.
-- It requires no internet permission and collects no data. It keeps nothing except your settings.
+- It requires no internet permission. The in-app activity log stays in memory and is cleared when the process exits.
 
-I created ConsentGuard to spare myself the tedious ritual of hunting through the endless settings so generously provided by loving and caring advertising and analytics providers, such as the one below:
+## Install a local build
 
-<img src="docs/screenshot-toggles.jpg" width="280"
-alt="A consent screen containing numerous individual toggle switches, one of which is switched off" />
-
-## Download
-
-1. Download `ConsentGuard.apk` from the [Releases page](https://github.com/macbuildssys/ConsentGuard/releases).
-2. Tap **Install**. Google Play Protect may warn you because the app is not from Google Play. Choose **More details**, then **Install anyway**, if you trust the source.
-3. Open **ConsentGuard**. It shows whether the service is switched on.
+Build with `./gradlew assembleDebug` on Linux or macOS, or `gradlew.bat assembleDebug` on Windows. Install `app/build/outputs/apk/debug/app-debug.apk` and open **CookieRejecter** to check the accessibility service status.
 
 ### Install on Android 13 and later
 
-Android can block accessibility services in apps installed from outside Google Play. This is called a restricted setting. If ConsentGuard is greyed out in the accessibility list, or Android shows a "Restricted setting" message when you try to switch it on, allow it like this:
+Android can block accessibility services in apps installed from outside Google Play. This is called a restricted setting. If CookieRejecter is greyed out in the accessibility list, or Android shows a "Restricted setting" message when you try to switch it on, allow it like this:
 
 1. Open the **Settings** app.
 2. Tap **Apps**.
-3. Tap **ConsentGuard**. If you cannot find it, tap **See all apps** or **App info** first.
+3. Tap **CookieRejecter**. If you cannot find it, tap **See all apps** or **App info** first.
 4. Tap the three dot menu (**More**) and choose **Allow restricted settings**.
 5. Follow the on screen instructions.
-6. Go back to **Settings > Accessibility > Installed apps > ConsentGuard** and turn it on.
+6. Go back to **Settings > Accessibility > Installed apps > CookieRejecter** and turn it on.
 
 If the **Allow restricted settings** option is not there, first try turning the service on once. Android then shows the restricted setting message, and the option appears in the app's menu afterwards.
 
@@ -55,15 +32,17 @@ The exact wording and location can vary between Android versions and device make
 
 ## Using it
 
-Once the service is on, there is nothing more to do. Browse as usual and ConsentGuard handles prompts as they appear.
+Once the service is on, tap the floating button when a supported prompt appears. Use **Pause** or **Stop** while CookieRejecter works. **Resume** rechecks the form so it can account for changes made during the pause. When the review is ready to submit, tap **Confirm choices** in the floating prompt. Open **Activity log** to see observed switch states, named changes, and forms that need review. On Android 11 or later, recognized Google forms are checked visually in both **Data preferences** and **Vendor preferences**. CookieRejecter keeps each screenshot in memory only long enough to read the switch pixels.
 
-- If ConsentGuard is not sure that every optional switch is off, it does not press Save or Confirm and leaves the panel as it is, so you can finish it yourself.
-- **Quick settings tile**: add the ConsentGuard tile to pause it for 5 minutes, and tap again to resume.
-- **Apps to skip**: in the rules screen you can add any app by its name, as shown on your home screen, and ConsentGuard will leave it alone. Nobody has to type a package name. Adding or removing an app is saved at once.
-- **Banking and payment apps are never monitored.** Bank, wallet, money transfer, email and chat apps (Gmail, WhatsApp, Signal, Telegram and similar) are skipped before anything on their screen is read. ConsentGuard recognises them by the name the app shows on your home screen (any name with "bank" in many languages, and brands like M-Pesa, Nala, LemFi, Wise, Sendwave, Samsung Pay and banks from about 90 countries). **See protected apps on this phone** in the rules screen shows exactly which of your apps are covered. If one is missing, add it by name. Browsers are never skipped, because that is where banners are, but screens that look like payment or sign in forms are left alone. See [docs/PRIVACY.md](docs/PRIVACY.md).
+- If CookieRejecter cannot verify the required switch states, it leaves the form open for review.
+- Add the **CookieRejecter** quick settings tile to pause it for 5 minutes. Tap it again to resume.
+- **Apps to skip**: search installed apps by name or package, then use the switch beside the app icon. Changes take effect immediately. **Show skipped apps only** shows both your choices and apps CookieRejecter always skips for protection.
+- **Banking, payment, email and chat apps** recognized by the built-in rules are skipped before their screen is read. The installed-app list marks them as always skipped. Screens that look like payment or sign-in forms are also left alone. See [docs/PRIVACY.md](docs/PRIVACY.md).
+- **App language** changes CookieRejecter’s settings, floating controls, and activity messages. The Google review matches labels in the consent form’s own language. See [language coverage](docs/LANGUAGES.md) for supported forms and test details.
+- **Completion alerts** opens Android’s notification settings. When enabled, a notification and sound tell you when a Google consent review has verified all vendor switches are off and is ready for you to confirm.
 - It does not block ads or close popups. It only deals with cookie consent panels. For ad blocking, use uBlock Origin in Firefox, the Brave or DuckDuckGo browser, or set Private DNS in Android settings to `dns.adguard-dns.com`.
-- To update, install the newer `ConsentGuard.apk` over the old one, then check that the service is still switched on.
-- To stop it, switch it off under **Settings > Accessibility > Installed apps > ConsentGuard**, or uninstall the app.
+- To update, install a newer CookieRejecter APK signed with the same key, then check that the service is still switched on.
+- To stop it, switch it off under **Settings > Accessibility > Installed apps > CookieRejecter**, or uninstall the app.
 
 ## Building
 
@@ -72,6 +51,26 @@ Once the service is on, there is nothing more to do. Browse as usual and Consent
 ```
 
 The APK is written to `app/build/outputs/apk/release/`. It is signed when a `keystore.properties` file is present (see `app/build.gradle.kts`), and left unsigned otherwise. The build is pinned to JDK 17 in `gradle.properties`, because JDK 21 as the system default makes the Android build fail with a jlink error. Change that path if your JDK 17 lives somewhere else.
+
+### Publishing on GitHub
+
+The [release workflow](.github/workflows/release.yml) builds and signs an APK, then attaches it to a GitHub prerelease when you push a numeric tag such as `0.0.2`. The tag must match `versionName` in `app/build.gradle.kts`. Increase `versionCode` for each update so Android can install it over the previous release.
+
+Set these repository secrets under **Settings → Secrets and variables → Actions**.
+
+| Secret | Value |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | Base64-encoded contents of the Android release keystore |
+| `ANDROID_KEYSTORE_PASSWORD` | Keystore password |
+| `ANDROID_KEY_ALIAS` | Alias of the signing key |
+| `ANDROID_KEY_PASSWORD` | Signing key password. Use the keystore password if both are the same |
+
+Keep a private backup of the keystore and reuse it for updates. After committing the workflow and version changes to your CookieRejecter repository, push the matching tag to that repository. For example, if `origin` points to your CookieRejecter repo and `versionName` is `0.0.2`:
+
+```sh
+git tag 0.0.2
+git push origin 0.0.2
+```
 
 ## Checking the build
 
@@ -86,8 +85,8 @@ The tools in `tools/` are Kotlin scripts. They need the Kotlin command line comp
 
 ## Best effort
 
-ConsentGuard works on a best effort basis. It can miss some banners and switches, and it cannot promise that a site stops tracking you or that any law is met. Read the full [best effort statement](docs/BEST_EFFORT.md).
+CookieRejecter works on a best effort basis. It can miss some banners and switches. Read the full [best effort statement](docs/BEST_EFFORT.md).
 
 ## License
 
-Distributed under the MIT License. See [LICENSE](LICENSE).
+CookieRejecter is distributed under the MIT License and retains macbuildssys’s original copyright and license notice. See [LICENSE](LICENSE).

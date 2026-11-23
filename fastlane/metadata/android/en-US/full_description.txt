@@ -1,13 +1,7 @@
-ConsentGuard watches the screen for cookie and tracking consent prompts in Chrome, in any app's embedded WebView and in native consent dialogues such as the Google consent form many apps show. It selects the reject option, or the necessary only option, so you don't have to click through the same banner again and again.
+CookieRejecter detects supported cookie and tracking consent prompts and shows a floating Reject optional choices button. Tap it to start a review. You can pause, resume, or stop longer reviews. When a form needs to be submitted, CookieRejecter asks you to confirm.
 
-Some consent screens offer no single reject button, only a long list of individual switches. ConsentGuard switches off the optional ones, then saves. Switches a site marks as required or essential are left on. If it is not sure that every optional switch is off, it does not press Save and leaves the panel for you to finish.
+On supported English Google consent forms, CookieRejecter checks the purpose and vendor switches and verifies changes visually. The in-app activity log shows the result and named switches it turned off.
 
-It never accepts. On a screen that offers only accept or pay, it does nothing. Withdraw and revoke buttons in privacy centres are left alone.
+Search Apps to skip to exclude individual apps. Built-in protection rules skip recognized banking, payment, email, and chat apps. CookieRejecter has no internet permission, and review processing takes place on your device.
 
-It reads banners in 17 languages at the same time, including German, French, Spanish, Italian, Dutch, Portuguese, Kiswahili, Arabic and several other African languages, so it also works on pages translated by the browser.
-
-Banking, payment, money transfer, email and chat apps are never monitored. You can add any other app to skip by its name.
-
-This app requests no permissions beyond the accessibility service, has no internet permission, makes no network requests and collects no data. It does not block ads or pop ups; that needs a network level filter rather than an accessibility service.
-
-ConsentGuard works on a best effort basis and can miss some banners and switches.
+CookieRejecter is a fork of ConsentGuard by macbuildssys and is distributed under the MIT License.

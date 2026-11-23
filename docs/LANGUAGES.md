@@ -1,6 +1,16 @@
 # Languages
 
-ConsentGuard matches the wording of banners in all the languages below at the same time. It does not try to guess the language of a page. This matters because a page translated by Google Translate, by Firefox Translations or by another tool shows text in a language the site never wrote, and the text can change a moment after the page loads.
+CookieRejecter inherits the ConsentGuard banner word lists described below. It matches those languages regardless of the selected app interface language.
+
+## Google Funding Choices
+
+The screenshot-assisted review matches English, Spanish, French, German, Italian, Portuguese, Japanese, Simplified Chinese, Russian, and Ukrainian labels in Google’s European consent forms. It checks that every switch in the recognized panels is off before offering confirmation. Google allows publishers to customize some labels, and an unfamiliar switch label in a recognized panel stops the review.
+
+English has been tested on live MacroDroid and Google UMP forms. The Google test form had 18 purpose switches and 249 vendor switches. After confirmation, its saved TCF purpose and vendor settings had zero consent or legitimate-interest flags enabled. Both languages passed emulator tests using sample Android WebView forms with enabled and disabled switches in each panel. Google’s Android test app served the English form with Spanish set as the primary Android language, so validation on a live Spanish Android form is still pending.
+
+The eight newer profiles use labels from Google’s localized message guides. Each passed an Android emulator test that opened the preferences from the banner, switched off enabled purpose and vendor choices, and waited for manual confirmation before saving. Live Android validation for those locales is still pending. Google lists Korean and Indonesian for IDFA messages. Its European message list covers Portuguese for Portugal.
+
+[Supported languages](https://support.google.com/admob/answer/10107561?hl=en#supported-languages) · [French](https://support.google.com/admob/answer/10114014?hl=fr) · [German](https://support.google.com/admob/answer/10114014?hl=de) · [Italian](https://support.google.com/admob/answer/10114014?hl=it) · [Portuguese](https://support.google.com/admob/answer/10114014?hl=pt-PT) · [Japanese](https://support.google.com/admob/answer/10114014?hl=ja) · [Simplified Chinese](https://support.google.com/admob/answer/10114014?hl=zh-Hans) · [Russian](https://support.google.com/admob/answer/10114014?hl=ru) · [Ukrainian](https://support.google.com/admob/answer/10114014?hl=uk)
 
 ## What is included
 

@@ -1,10 +1,10 @@
-# What ConsentGuard can and cannot see
+# CookieRejecter privacy
 
 This page is written so you can check each claim yourself, not just believe it.
 
 ## What it does
 
-ConsentGuard is an Android accessibility service. It reads the text on the screen only to find a cookie consent panel. When it finds one it taps Reject, or switches optional choices off. Nothing else.
+CookieRejecter is an Android accessibility service. It reads on-screen text to find consent forms. After you tap the floating button, it can interact with the form and briefly inspect pixels in recognized Google forms to verify switch states. It discards each screenshot after the check.
 
 ## What it never does
 
@@ -12,26 +12,23 @@ ConsentGuard is an Android accessibility service. It reads the text on the scree
 The app has no INTERNET permission. Android enforces this. Look at `AndroidManifest.xml` (the permission is removed on purpose) or run `kotlinc -script tools/check_no_network.kts`.
 
 **Banking and payment apps are not monitored.**
-The first thing every scan does is check the app name. For banks, wallets, payment, email and chat apps it stops there, before any text is read. See `isSafeZone` in `ConsentBlockerService.kt` and `SafeZoneWords.kt`. In the app, **Apps to skip** then **See protected apps on this phone** lists them on your own phone.
+CookieRejecter checks whether to skip an app before reading its screen. **Apps to skip** marks apps recognized by the built-in banking, payment, email, and chat rules. See `isSafeZone` in `ConsentBlockerService.kt` and `SafeZoneWords.kt`.
 
-**It keeps no logs.**
-Logging only exists in debug builds (`BuildConfig.DEBUG`). A release build writes nothing.
+**The activity log stays in memory.**
+It includes app names, consent actions, and switch changes. It clears when the process exits or when you clear it in the app. Debug builds can also write diagnostics to Android’s system log.
 
-**It keeps no history of what you read or did.**
-The only things stored are your skipped app names and the pause time. Older versions' leftovers are deleted on start.
-
-**The APK is the code you can read.**
-The build is reproducible. Build it yourself and compare. F-Droid builds from the source.
+**Settings are stored locally.**
+The app saves your skipped apps, the quick-settings pause time, and the selected language.
 
 ## How to be sure it has no internet access
 
 On Android an app can only use the network if its manifest declares the INTERNET permission. This is a normal permission: Android grants it automatically at install and never shows a prompt for it, so users cannot see it being given. That is why the manifest is the place to look. An app that does not declare it is refused every connection by the system. So the question comes down to one thing you can look at. Three ways, from easy to thorough:
 
-1. **On your phone.** Open Settings, Apps, ConsentGuard, Permissions. Network access is not shown there because it is a normal permission, so also check Settings, Connections, Data usage, and look at ConsentGuard: it should show 0 bytes however long you use it.
+1. **On your phone.** Open the app’s data usage in Android Settings and look for CookieRejecter.
 
-2. **With adb.** `adb shell dumpsys package dev.macbuildssys.consentguard | grep -i internet` prints nothing when the permission is absent. To see the full list of permissions, run `adb shell dumpsys package dev.macbuildssys.consentguard` and read the "requested permissions" part. ConsentGuard asks for none.
+2. **With adb.** Run `adb shell dumpsys package dev.cookierejecter` and check the requested permissions for `android.permission.INTERNET`.
 
-3. **From the APK itself.** `aapt dump permissions app-debug.apk` (from the Android build tools) lists the permissions inside the file you install. It should list none. Do this on the APK you downloaded, so it checks the real file and not the source.
+3. **From the APK itself.** Run `aapt dump permissions app-debug.apk` and check the output for `android.permission.INTERNET`.
 
 For the source, run `kotlinc -script tools/check_no_network.kts`. It fails if the manifest asks for a network permission, or if the code uses networking classes or opens links or share screens that could pass data to another app.
 

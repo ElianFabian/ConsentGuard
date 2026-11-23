@@ -1,1 +1,1 @@
-Automatically rejects cookie and tracking consent prompts on the device
+Review and reject optional cookie and tracking choices on your device

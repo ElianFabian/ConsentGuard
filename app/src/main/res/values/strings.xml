@@ -1,31 +1,73 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="accessibility_service_description">Reads the on screen text only to find cookie and tracking consent prompts, then taps the reject option or switches optional choices off. It does not send anything anywhere and keeps nothing except your settings. It works on a best effort basis and can miss things.</string>
-    <string name="best_effort_notice">ConsentGuard works on a best effort basis. It tries to reject cookie and tracking choices and to switch off optional ones, but it can miss some, and it cannot promise that a site stops tracking you or that any law is met. Choices a site marks as required or essential are left on. If it is not sure that every optional switch is off, it does not press Save or Confirm and leaves the panel as it is. Check the sites that matter to you yourself.</string>
-    <string name="protected_notice">Banking and payment apps are never monitored. ConsentGuard checks the app name first and stops before it reads anything on the screen. Email and chat apps are left alone too. If an app is missing from the list, add it below.\n\nNo internet access: Android only allows an app to use the network if its manifest declares the INTERNET permission. ConsentGuard does not ask for this permission. You can independently verify this: in Android settings, the app\'s data usage stays at 0.\n\nIn a browser it must read the page to find a cookie banner, and it does nothing on screens that look like payment or sign in forms.</string>
-    <string name="main_notice">Banking and payment apps are never monitored by ConsentGuard. It checks the app name first and does not read their screens. Tap Apps to skip to see the list on your phone. It also has no internet permission, so it cannot send anything off your phone.</string>
-    <string name="tile_label">ConsentGuard</string>
-    <string name="tile_label_paused">ConsentGuard paused</string>
-    <string name="copyright_notice">© macbuildssys</string>
+    <string name="app_title" translatable="false">CookieRejecter</string>
+    <string name="reject_optional">Reject optional choices</string>
+    <string name="main_instruction">When a supported consent dialog appears, tap the floating button to start.</string>
+    <string name="last_run">Latest attempt</string>
+    <string name="open_log">Activity log</string>
+    <string name="clear_log">Clear log</string>
+    <string name="log_empty">No activity in the current app session.</string>
+    <string name="log_started">Started refusal.</string>
+    <string name="log_all_apps">All apps</string>
+    <string name="log_app_disambiguation" translatable="false">%1$s (%2$s)</string>
+    <plurals name="log_app_entries">
+        <item quantity="one">%d entry</item>
+        <item quantity="other">%d entries</item>
+    </plurals>
+    <string name="log_manage">Sent a tap to open consent options.</string>
+    <string name="log_switch_action">Sent a tap to turn off an optional switch.</string>
+    <string name="log_switch_off">Rechecked an optional switch and observed it off. Vendor identity unverified.</string>
+    <string name="log_switch_unverified">Could not verify the switch state after the tap.</string>
+    <string name="log_google_panel_changed">The Google consent panel moved or changed unexpectedly.</string>
+    <string name="log_google_inventory_unknown">Could not account for every switch in the Google consent panel.</string>
+    <string name="log_google_capture_failed">Android did not provide a readable image of the consent controls.</string>
+    <string name="log_google_state_unknown">Could not read this switch: %1$s.</string>
+    <string name="log_google_change_failed">Could not verify that this switch turned off: %1$s.</string>
+    <string name="log_google_switch_off">Turned off and verified</string>
+    <string name="log_google_panel_off">All detected switches visually verified off: %1$s.</string>
+    <string name="google_purposes">Data preferences</string>
+    <string name="google_vendors">Vendor preferences</string>
+    <string name="result_google_verified">Data and vendor switches checked off. Confirmation sent.</string>
+    <string name="result_none">Waiting for your first attempt.</string>
+    <string name="result_running">Checking the consent form…</string>
+    <string name="pause_run">Pause</string>
+    <string name="resume_run">Resume</string>
+    <string name="stop_run">Stop</string>
+    <string name="confirm_run">Confirm choices</string>
+    <string name="confirm_run_ready">Ready to confirm</string>
+    <string name="result_ready">Ready to confirm. Review the form, then tap Confirm choices in CookieRejecter.</string>
+    <string name="result_confirmation_changed">The form was used after verification. Start again to recheck the choices.</string>
+    <string name="result_paused">Refusal paused.</string>
+    <string name="log_resumed">Refusal resumed. Rechecking the form.</string>
+    <string name="result_stopped">Refusal stopped. Changes already made are still in the form.</string>
+    <string name="result_incomplete">Review needed. CookieRejecter could not finish checking the form.</string>
+    <string name="result_vendor_review">Form left open. Open Vendor preferences to check vendor consent and legitimate-interest settings before confirming.</string>
+    <string name="vendor_review_toast">Review Vendor preferences before confirming.</string>
+    <string name="result_action_sent">Refusal action sent. Saved choices and individual vendor settings are unverified.</string>
+    <string name="accessibility_service_description">Reads on-screen text to detect consent forms. After you tap the floating button, CookieRejecter may briefly inspect pixels in recognized Google forms to verify switch states, press refusal controls, and scroll. Processing stays on the device. Screenshots are discarded after each check.</string>
+    <string name="tile_label" translatable="false">CookieRejecter</string>
+    <string name="tile_label_paused">CookieRejecter paused</string>
 
-    <string name="status_enabled">Service is enabled</string>
-    <string name="status_disabled">Service is disabled. Tap below, find ConsentGuard, and turn it on.</string>
+    <string name="status_enabled">Accessibility is enabled</string>
+    <string name="status_disabled">Accessibility is off</string>
     <string name="open_accessibility_settings">Open accessibility settings</string>
     <string name="apps_to_skip">Apps to skip</string>
-    <string name="settings_missing">Settings could not be opened on this phone. Open Settings, then Accessibility, and turn ConsentGuard on there.</string>
+    <string name="settings_missing">Open Android Settings, then Accessibility, and enable CookieRejecter.</string>
 
-    <string name="rules_title">Apps ConsentGuard leaves alone</string>
-    <string name="show_protected">See protected apps on this phone</string>
-    <string name="skip_another">Skip another app</string>
-    <string name="skip_help">Type the app name as it shows on your home screen, then tap Add. ConsentGuard does nothing in apps on this list.</string>
-    <string name="app_name_hint">App name</string>
-    <string name="add">Add</string>
-    <string name="remove">Remove</string>
-    <string name="remove_app">Remove %1$s</string>
-    <string name="apps_still_loading">Still reading the list of apps on this phone. Try again in a moment.</string>
-    <string name="app_not_found">No installed app is named \"%1$s\". Pick a name from the suggestions.</string>
-    <string name="app_saved">Saved. ConsentGuard will skip %1$s.</string>
-    <string name="added_by_you">%1$s (added by you)</string>
-    <string name="protected_title">Never touched by ConsentGuard</string>
-    <string name="no_protected_apps">No banking, payment, email or chat apps were found on this phone. If you have one, add it by name.</string>
+    <string name="search_apps">Search apps</string>
+    <string name="show_skipped_only">Show skipped apps only</string>
+    <string name="apps_loading">Loading installed apps…</string>
+    <string name="apps_no_matches">No matching apps.</string>
+    <string name="app_always_skipped">Always skipped for protection</string>
+    <string name="skip_named_app">Skip %1$s</string>
+    <string name="app_language">App language</string>
+    <string name="language_system">System default</string>
+    <string name="apps_back">Back</string>
+    <string name="how_it_works">How it works</string>
+    <string name="how_review">CookieRejecter checks optional switches and turns off the ones it can verify. Use Pause or Stop during the review.</string>
+    <string name="how_confirm">When Ready to confirm appears, tap Confirm choices. Open Activity log to see what changed.</string>
+    <string name="home_settings">Settings</string>
+    <string name="completion_alerts">Completion alerts</string>
+    <string name="vendor_switches_off_title">All vendor switches are off</string>
+    <string name="vendor_switches_off_body">Tap %1$s in the floating controls to save.</string>
 </resources>

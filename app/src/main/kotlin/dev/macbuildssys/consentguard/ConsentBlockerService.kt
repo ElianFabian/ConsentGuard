@@ -9,7 +9,9 @@ import android.graphics.Point
 import android.graphics.Rect
 import android.hardware.display.DisplayManager
 import android.os.Handler
+import android.os.Build
 import android.os.HandlerThread
+import android.os.Looper
 import android.os.Process
 import android.os.SystemClock
 import android.provider.Settings
@@ -18,6 +20,7 @@ import android.util.Log
 import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.widget.Toast
 import java.util.concurrent.atomic.AtomicBoolean
 
 class ConsentBlockerService : AccessibilityService() {
@@ -180,6 +183,23 @@ class ConsentBlockerService : AccessibilityService() {
 
     @Volatile private var lastScanStartedAt = 0L
     @Volatile private var sessionActive = false
+    private data class ConsentWindow(val packageName: String, val id: Int)
+    private enum class RunMode { RUNNING, PAUSED, READY, SUBMITTING, STOPPED }
+    private class RunControls {
+        @Volatile var mode = RunMode.RUNNING
+        var googlePanelDeadline = 0L
+    }
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val prompt by lazy { ConsentPrompt(this) }
+    @Volatile private var offeredWindow: ConsentWindow? = null
+    @Volatile private var runControls: RunControls? = null
+    private var approvedWindow: ConsentWindow? = null
+    private var approvalExpires = 0L
+    private var approvalTimeout: Runnable? = null
+    private var pendingConfirmation: (() -> Unit)? = null
+    private var reviewWindow: ConsentWindow? = null
+    private var switchToRecheck: AccessibilityNodeInfo? = null
+    private var googleReview: GoogleConsentReview? = null
 
     /* A limit on how long one scan may read the screen, see outOfBudget. When
        it runs out, whatever was not read is treated as unknown, and nothing
@@ -208,7 +228,10 @@ class ConsentBlockerService : AccessibilityService() {
         /* Loading the phrase lists is the biggest single piece of work, so it
            is done on the worker too. Events that arrive meanwhile queue up
            behind it and are handled once it is done. */
-        handler.post { loadWording() }
+        handler.post {
+            loadWording()
+            runScan()
+        }
     }
 
     private fun loadWording() {
@@ -241,9 +264,192 @@ class ConsentBlockerService : AccessibilityService() {
     }
 
     override fun onDestroy() {
-        workerThread?.quitSafely()
+        ConsentReadyNotification.clear(this)
+        if (::handler.isInitialized) handler.removeCallbacksAndMessages(null)
+        workerThread?.quit()
         workerThread = null
+        mainHandler.removeCallbacksAndMessages(null)
+        prompt.hide()
         super.onDestroy()
+    }
+
+    private fun offerPrompt(window: ConsentWindow?) {
+        if (offeredWindow == window) return
+        offeredWindow = window
+        refreshPrompt()
+    }
+
+    private fun refreshPrompt() {
+        mainHandler.post {
+            if (workerThread == null) return@post
+            val controls = runControls
+            if (controls?.mode == RunMode.SUBMITTING) {
+                prompt.hide()
+                return@post
+            }
+            if (controls?.mode == RunMode.READY) {
+                prompt.showConfirmation(
+                    onConfirm = { confirmRun(controls) },
+                    onStop = { requestRunMode(controls, RunMode.STOPPED) }
+                )
+                return@post
+            }
+            if (controls != null && controls.mode != RunMode.STOPPED) {
+                prompt.showControls(
+                    paused = controls.mode == RunMode.PAUSED,
+                    onPauseOrResume = {
+                        val mode = if (controls.mode == RunMode.RUNNING) RunMode.PAUSED else RunMode.RUNNING
+                        requestRunMode(controls, mode)
+                    },
+                    onStop = { requestRunMode(controls, RunMode.STOPPED) }
+                )
+                return@post
+            }
+            val window = offeredWindow
+            prompt.hide()
+            if (window != null) prompt.show {
+                handler.post approval@{
+                    if (offeredWindow != window || runControls != null) return@approval
+                    val root = rootInActiveWindow
+                    if (root == null || root.packageName?.toString() != window.packageName ||
+                        root.windowId != window.id || isPaused()
+                    ) {
+                        offerPrompt(null)
+                        return@approval
+                    }
+                    approvedWindow = window
+                    val approvedControls = RunControls()
+                    runControls = approvedControls
+                    lastResult = R.string.result_running
+                    ConsentActivityLog.record(window.packageName, R.string.log_started)
+                    offerPrompt(null)
+                    startApprovalTimeout(approvedControls)
+                    runScan()
+                }
+            }
+        }
+    }
+
+    private fun requestRunMode(controls: RunControls, mode: RunMode) {
+        if (runControls !== controls || controls.mode == RunMode.STOPPED) return
+        // Publish before queueing so a running scan sees the request before its next action.
+        controls.mode = mode
+        refreshPrompt()
+        handler.post {
+            val window = approvedWindow ?: return@post
+            if (runControls !== controls || controls.mode != mode) return@post
+            when (mode) {
+                RunMode.PAUSED -> {
+                    cancelApprovalCallbacks()
+                    approvalExpires = Long.MAX_VALUE
+                    googleReview = null
+                    lastResult = R.string.result_paused
+                    ConsentActivityLog.record(window.packageName, R.string.result_paused)
+                }
+                RunMode.RUNNING -> {
+                    googleReview = null
+                    controls.googlePanelDeadline = 0L
+                    switchToRecheck = null
+                    resetSessionStateIfNewPackage("")
+                    resetSessionStateIfNewPackage(window.packageName)
+                    lastResult = R.string.result_running
+                    ConsentActivityLog.record(window.packageName, R.string.log_resumed)
+                    startApprovalTimeout(controls)
+                    runScan()
+                }
+                RunMode.STOPPED -> {
+                    reviewWindow = window
+                    finishApproval(R.string.result_stopped)
+                }
+                RunMode.READY, RunMode.SUBMITTING -> Unit
+            }
+        }
+    }
+
+    private fun startApprovalTimeout(controls: RunControls) {
+        approvalTimeout?.let(handler::removeCallbacks)
+        approvalExpires = SystemClock.uptimeMillis() + 480_000L
+        val timeout = Runnable {
+            if (runControls === controls && controls.mode == RunMode.RUNNING) {
+                finishApproval(R.string.result_incomplete)
+                runScan()
+            }
+        }
+        approvalTimeout = timeout
+        handler.postAtTime(timeout, approvalExpires)
+    }
+
+    private fun cancelApprovalCallbacks() {
+        approvalTimeout?.let(handler::removeCallbacks)
+        approvalTimeout = null
+        pendingFollowUp?.let(handler::removeCallbacks)
+        pendingFollowUp = null
+    }
+
+    private fun waitForConfirmation(verifiedVendors: Boolean = false, action: () -> Unit) {
+        val controls = runControls ?: return
+        val window = approvedWindow ?: return
+        if (controls.mode != RunMode.RUNNING) return
+        pendingConfirmation = action
+        controls.mode = RunMode.READY
+        cancelApprovalCallbacks()
+        lastResult = R.string.result_ready
+        ConsentActivityLog.record(window.packageName, R.string.result_ready)
+        if (verifiedVendors) ConsentReadyNotification.show(this)
+        refreshPrompt()
+    }
+
+    private fun confirmRun(controls: RunControls) {
+        handler.post {
+            val action = pendingConfirmation ?: return@post
+            if (runControls !== controls || controls.mode != RunMode.READY) return@post
+            pendingConfirmation = null
+            controls.mode = RunMode.SUBMITTING
+            ConsentReadyNotification.clear(this)
+            approvalExpires = SystemClock.uptimeMillis() + 5_000L
+            // Remove the ready overlay before revalidating the target and sending the tap.
+            mainHandler.post {
+                if (runControls === controls && controls.mode == RunMode.SUBMITTING) {
+                    prompt.hide()
+                    handler.post {
+                        if (runControls === controls && controls.mode == RunMode.SUBMITTING) action()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun finishApproval(result: Int) {
+        val hadControls = runControls != null
+        approvedWindow?.let { window ->
+            val finalResult = if (runControls?.mode == RunMode.STOPPED &&
+                result != R.string.result_action_sent && result != R.string.result_google_verified
+            ) R.string.result_stopped else result
+            if (finalResult == R.string.result_stopped) reviewWindow = window
+            lastResult = finalResult
+            ConsentActivityLog.record(window.packageName, finalResult)
+            if (finalResult == R.string.result_vendor_review) {
+                mainHandler.post {
+                    Toast.makeText(forAppLanguage(), R.string.vendor_review_toast, Toast.LENGTH_LONG)
+                        .show()
+                }
+            }
+        }
+        if (hadControls) {
+            cancelApprovalCallbacks()
+            ConsentReadyNotification.clear(this)
+        }
+        approvedWindow = null
+        runControls = null
+        pendingConfirmation = null
+        googleReview = null
+        switchToRecheck = null
+        if (hadControls) {
+            offeredWindow = null
+            refreshPrompt()
+        } else {
+            offerPrompt(null)
+        }
     }
 
     /* Runs on the main thread, so it does as little as possible: it only
@@ -255,8 +461,18 @@ class ConsentBlockerService : AccessibilityService() {
            system's, which send a steady stream of events (the clock, the
            status bar) that have nothing to do with the page underneath. */
         if (eventPackage == this.packageName) return
-        if (eventPackage != null && isOffLimits(eventPackage)) return
+        if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
+            if (runControls?.mode == RunMode.READY) handler.post {
+                val window = approvedWindow
+                if (runControls?.mode == RunMode.READY && window != null && eventPackage == window.packageName) {
+                    finishApproval(R.string.result_confirmation_changed)
+                    runScan()
+                }
+            }
+            return
+        }
         val urgent = event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+        if (eventPackage != null && isOffLimits(eventPackage) && !urgent) return
         requestScan(eventPackage, urgent)
     }
 
@@ -288,7 +504,10 @@ class ConsentBlockerService : AccessibilityService() {
 
     private fun runScan() {
         lastScanStartedAt = SystemClock.uptimeMillis()
-        val root = rootInActiveWindow ?: return
+        val root = rootInActiveWindow ?: run {
+            finishApproval(R.string.result_incomplete)
+            return
+        }
         /* The window that is actually on screen decides which app this is,
            whatever app the event came from. */
         val packageName = root.packageName?.toString() ?: lastEventPackage ?: return
@@ -426,7 +645,9 @@ class ConsentBlockerService : AccessibilityService() {
        their wording instead (see sensitiveScreenTextPatterns). */
     private fun isSafeZone(packageName: String): Boolean {
         if (SafeZoneWords.isSafeZone(this, packageName)) return true
-        val raw = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(KEY_SKIPPED_APPS, "") ?: ""
+        val preferences = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        if (packageName in preferences.getStringSet(KEY_SKIPPED_PACKAGES, emptySet()).orEmpty()) return true
+        val raw = preferences.getString(KEY_SKIPPED_APPS, "") ?: ""
         if (raw != skippedRaw) {
             skippedRaw = raw
             skippedNames = raw.split('\n')
@@ -484,9 +705,76 @@ class ConsentBlockerService : AccessibilityService() {
         /* Checked here as well as when an event arrives, because the follow
            up scans call this directly and whatever is on screen by then may
            be a different app. */
-        if (isOffLimits(packageName)) return
-        if (isPaused()) return
-        if (isSafeZone(packageName)) return
+        val window = ConsentWindow(packageName, root.windowId)
+        if (approvedWindow != null &&
+            (approvedWindow != window ||
+                (runControls?.mode == RunMode.RUNNING && SystemClock.uptimeMillis() >= approvalExpires))
+        ) finishApproval(R.string.result_incomplete)
+        if (reviewWindow != window) reviewWindow = null
+        if (isOffLimits(packageName) || isPaused() || isSafeZone(packageName)) {
+            finishApproval(R.string.result_incomplete)
+            return
+        }
+        if (runControls?.mode?.let { it != RunMode.RUNNING } == true) return
+        if (Build.VERSION.SDK_INT >= 30) {
+            googleReview?.let {
+                it.step(root)
+                return
+            }
+            if (GoogleConsentPanel.read(root, readControls = false) != null) {
+                if (approvedWindow != window) {
+                    offerPrompt(if (reviewWindow == window) null else window)
+                    return
+                }
+                val controls = runControls ?: return
+                controls.googlePanelDeadline = 0L
+                lateinit var review: GoogleConsentReview
+                review = GoogleConsentReview(this, handler, packageName, activeRoot = {
+                    rootInActiveWindow?.takeIf {
+                        approvedWindow == window && runControls === controls &&
+                            (controls.mode == RunMode.RUNNING || controls.mode == RunMode.SUBMITTING) &&
+                            googleReview === review &&
+                            SystemClock.uptimeMillis() < approvalExpires && !isPaused() &&
+                            it.windowId == window.id && it.packageName?.toString() == window.packageName
+                    }
+                }, canTouch = { x, y -> !prompt.covers(x, y) },
+                    readyToConfirm = { action -> waitForConfirmation(verifiedVendors = true, action = action) },
+                    nextScan = { scheduleFollowUpScan(packageName, it) }, finish = { result ->
+                    reviewWindow = window
+                    finishApproval(result)
+                })
+                googleReview = review
+                review.step(root)
+                return
+            }
+            val controls = runControls
+            val now = SystemClock.uptimeMillis()
+            if (controls != null && controls.googlePanelDeadline in 1..now) {
+                reviewWindow = window
+                finishApproval(R.string.result_vendor_review)
+                return
+            }
+            val banner = GoogleConsentPanel.readBanner(root)
+            if (banner != null) {
+                if (approvedWindow != window) {
+                    offerPrompt(if (reviewWindow == window) null else window)
+                    return
+                }
+                if (controls == null) return
+                val action = if (banner.reject) "reject" else "manage"
+                val clicked = clickNode(
+                    banner.node, packageName, "google_funding_choices:$action",
+                    useAccessibilityAction = false
+                )
+                if (clicked && banner.reject) return
+                if (controls.googlePanelDeadline == 0L) controls.googlePanelDeadline = now + 3_000L
+            }
+            if (controls != null && controls.googlePanelDeadline > now) {
+                if (Build.VERSION.SDK_INT >= 33) clearCache()
+                scheduleFollowUpScan(packageName, 350)
+                return
+            }
+        }
 
         val cooldown = when {
             lastActionWasToggle -> TOGGLE_STEP_DELAY_MS
@@ -513,6 +801,8 @@ class ConsentBlockerService : AccessibilityService() {
         val evidence = judgeConsentScreen(root, packageName)
         sessionActive = evidence.looksLikeConsent
         if (!evidence.looksLikeConsent) {
+            finishApproval(R.string.result_incomplete)
+            reviewWindow = null
             bannerFirstSeen = 0L
             labelClickCounts.clear()
             waitForTargetRetries = 0
@@ -525,12 +815,26 @@ class ConsentBlockerService : AccessibilityService() {
             return
         }
         if (evidence.cookieWall) {
+            finishApproval(R.string.result_incomplete)
             /* Only accept or pay on offer, nothing to reject. There is nothing
                to tap, so no point in looking again and again. */
             debugLog("Accept or pay wall in $packageName, nothing to reject, leaving it alone")
             return
         }
         if (bannerFirstSeen == 0L) bannerFirstSeen = System.currentTimeMillis()
+        if (approvedWindow != window) {
+            offerPrompt(if (reviewWindow == window) null else window)
+            return
+        }
+        switchToRecheck?.let { node ->
+            val message = if (node.refresh() && node.isCheckable && !node.isChecked) {
+                R.string.log_switch_off
+            } else {
+                R.string.log_switch_unverified
+            }
+            ConsentActivityLog.record(packageName, message)
+            switchToRecheck = null
+        }
         bannerHasAcceptButton = evidence.acceptButton
         resetSessionStateIfNewPackage(packageName)
         debugLog("Consent screen recognised in $packageName, evaluating rules")
@@ -571,11 +875,13 @@ class ConsentBlockerService : AccessibilityService() {
         for (rule in rules) {
             if (rule.toggleResourceIdPrefixes.isEmpty()) continue
             if (handleToggleScreen(root, packageName, rule)) return
+            if (runControls?.mode != RunMode.RUNNING) return
         }
 
         for (rule in rules) {
             if (rule.rejectButtonTextPatterns.isEmpty()) continue
             if (handleRejectButtonScreen(root, packageName, rule)) return
+            if (runControls?.mode != RunMode.RUNNING) return
         }
 
         /* Ordinary switches and checkboxes, the kind Chrome and most native
@@ -585,8 +891,10 @@ class ConsentBlockerService : AccessibilityService() {
            read like a settings button). Refuses to act unless the screen
            really is a cookie preference panel, see the checks inside. */
         if (handleMinusButtons(root, packageName)) return
+        if (runControls?.mode != RunMode.RUNNING) return
 
         if (handleGenericSwitchScreen(root, packageName)) return
+        if (runControls?.mode != RunMode.RUNNING) return
 
         for (rule in rules) {
             val node = findMatch(
@@ -769,7 +1077,7 @@ class ConsentBlockerService : AccessibilityService() {
         val atEnd = scrollable != null && scrollReachedEnd(root)
         if (atEnd) debugLog("The panel in $packageName did not move on the last scroll, end reached")
         if (scrollable != null && !atEnd && scrollAttempts < MAX_SCROLL_ATTEMPTS) {
-            val scrolled = scrollable.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+            val scrolled = performScroll(scrollable, AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
             debugLog("Scroll attempt in $packageName: performed=$scrolled")
             if (scrolled) {
                 lastScrollTime = System.currentTimeMillis()
@@ -794,7 +1102,7 @@ class ConsentBlockerService : AccessibilityService() {
             if (verifyScrollBackAttempts == 0) lastScrollSignature = 0
             val backAtTop = scrollBack != null && verifyScrollBackAttempts > 0 && scrollReachedEnd(root)
             if (scrollBack != null && !backAtTop && verifyScrollBackAttempts < MAX_SCROLL_ATTEMPTS) {
-                val scrolledBack = scrollBack.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
+                val scrolledBack = performScroll(scrollBack, AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
                 debugLog("Verification scroll back in $packageName: performed=$scrolledBack")
                 if (scrolledBack) {
                     /* Same as a forward scroll: nothing is tapped until it has
@@ -964,7 +1272,7 @@ class ConsentBlockerService : AccessibilityService() {
         val atEnd = scrollable != null && scrollReachedEnd(root)
         if (atEnd) debugLog("The panel in $packageName did not move on the last scroll, end reached")
         if (scrollable != null && !atEnd && scrollAttempts < MAX_SCROLL_ATTEMPTS) {
-            val scrolled = scrollable.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+            val scrolled = performScroll(scrollable, AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
             debugLog("Scroll attempt in $packageName: performed=$scrolled")
             if (scrolled) {
                 lastScrollTime = System.currentTimeMillis()
@@ -1120,7 +1428,7 @@ class ConsentBlockerService : AccessibilityService() {
 
             val scrollable = findScrollableAncestor(next) ?: findScrollable(root)
             if (scrollable != null && minusScrollAttempts < MAX_SCROLL_ATTEMPTS) {
-                val scrolled = scrollable.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+                val scrolled = performScroll(scrollable, AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
                 debugLog("Minus button scroll in $packageName: performed=$scrolled")
                 if (scrolled) {
                     lastScrollTime = System.currentTimeMillis()
@@ -1268,7 +1576,7 @@ class ConsentBlockerService : AccessibilityService() {
         val genericAtEnd = scrollable != null && scrollReachedEnd(root)
         if (genericAtEnd) debugLog("The panel in $packageName did not move on the last scroll, end reached")
         if (scrollable != null && !genericAtEnd && genericScrollAttempts < MAX_SCROLL_ATTEMPTS) {
-            val scrolled = scrollable.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+            val scrolled = performScroll(scrollable, AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
             debugLog("Generic switch scroll in $packageName: performed=$scrolled")
             if (scrolled) {
                 lastScrollTime = System.currentTimeMillis()
@@ -1289,7 +1597,7 @@ class ConsentBlockerService : AccessibilityService() {
             if (genericVerifyBackAttempts == 0) lastScrollSignature = 0
             val genericBackAtTop = back != null && genericVerifyBackAttempts > 0 && scrollReachedEnd(root)
             if (back != null && !genericBackAtTop && genericVerifyBackAttempts < MAX_SCROLL_ATTEMPTS) {
-                val scrolledBack = back.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
+                val scrolledBack = performScroll(back, AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
                 if (scrolledBack) {
                     lastScrollTime = System.currentTimeMillis()
                     genericVerifyBackAttempts++
@@ -1909,7 +2217,41 @@ class ConsentBlockerService : AccessibilityService() {
        synthesized touch is indistinguishable from a real finger tap at
        the input level, so it triggers whatever the widget is actually
        listening for. */
-    private fun clickNode(node: AccessibilityNodeInfo, packageName: String, ruleLabel: String): Boolean {
+    private fun canActOn(node: AccessibilityNodeInfo): Boolean {
+        val approved = approvedWindow ?: return false
+        val root = rootInActiveWindow ?: return false
+        val mode = runControls?.mode
+        return (mode == RunMode.RUNNING || mode == RunMode.SUBMITTING) && !isPaused() &&
+            SystemClock.uptimeMillis() < approvalExpires &&
+            node.windowId == approved.id && root.windowId == approved.id &&
+            root.packageName?.toString() == approved.packageName
+    }
+
+    private fun performScroll(node: AccessibilityNodeInfo, action: Int): Boolean =
+        canActOn(node) && node.performAction(action)
+
+    private fun clickNode(
+        node: AccessibilityNodeInfo,
+        packageName: String,
+        ruleLabel: String,
+        confirmedByUser: Boolean = false,
+        useAccessibilityAction: Boolean = true
+    ): Boolean {
+        val approved = approvedWindow ?: return false
+        if (runControls?.mode != if (confirmedByUser) RunMode.SUBMITTING else RunMode.RUNNING) return false
+        val current = rootInActiveWindow ?: return false
+        if (approved != ConsentWindow(packageName, node.windowId) ||
+            current.windowId != approved.id || current.packageName?.toString() != packageName ||
+            SystemClock.uptimeMillis() >= approvalExpires || isPaused()
+        ) return false
+        if (ruleLabel.endsWith(":confirm") &&
+            (ruleLabel.startsWith("google_funding_choices:") ||
+                treeHasResourceIdPrefix(current, listOf("fc-preference-slider")))
+        ) {
+            reviewWindow = approved
+            finishApproval(R.string.result_vendor_review)
+            return false
+        }
         val key = "$packageName:$ruleLabel"
         val now = System.currentTimeMillis()
         val last = recentActions[key] ?: 0L
@@ -1940,6 +2282,7 @@ class ConsentBlockerService : AccessibilityService() {
            ever turned off, never on. Everything else is a button, and a
            button that reads as payment or accept everything is not tapped. */
         val isSwitch = ruleLabel.contains(":toggle:") || ruleLabel.contains(":gswitch:")
+        if (isSwitch && (!node.isCheckable || !node.isChecked || !node.isEnabled)) return false
         val nodeText = normalizedLabel(node, MAX_ANCHOR_TEXT_LENGTH).orEmpty()
         if (!isSwitch && nodeText.isNotEmpty() && !isSafeLabel(nodeText)) {
             debugLog("Refusing to tap unsafe label \"$nodeText\" for $ruleLabel in $packageName")
@@ -1966,13 +2309,23 @@ class ConsentBlockerService : AccessibilityService() {
            press it, on the element itself, with no screen position involved.
            That cannot land on the wrong thing. If the same button is still
            there on a later try, the tap by screen position is used instead. */
-        val firstTry = isPlainButton && labelClickCounts.getOrDefault(countKey, 0) == 0
+        val firstTry = useAccessibilityAction && isPlainButton && labelClickCounts.getOrDefault(countKey, 0) == 0
         var pressedByAction = false
+        if (!canActOn(node)) return false
+        if (ruleLabel.endsWith(":confirm") && !confirmedByUser) {
+            waitForConfirmation {
+                if (!clickNode(node, packageName, ruleLabel, confirmedByUser = true)) {
+                    finishApproval(R.string.result_incomplete)
+                }
+            }
+            return false
+        }
         val dispatched = if (firstTry && clickWithAction(node)) {
             debugLog("Pressed \"$nodeText\" for $ruleLabel by action")
             pressedByAction = true
             true
         } else {
+            if (prompt.covers(bounds.centerX(), bounds.centerY()) || !canActOn(node)) return false
             val path = Path().apply { moveTo(bounds.exactCenterX(), bounds.exactCenterY()) }
             val gesture = GestureDescription.Builder()
                 .addStroke(GestureDescription.StrokeDescription(path, 0, TAP_DURATION_MS))
@@ -1999,6 +2352,12 @@ class ConsentBlockerService : AccessibilityService() {
             lastActionWasToggle = ruleLabel.contains(":toggle:") ||
                 ruleLabel.contains(":reject:") || ruleLabel.contains(":expand:")
             lastActionWasGenericSwitch = ruleLabel.contains(":gswitch:")
+            if (ruleLabel.endsWith(":manage")) {
+                ConsentActivityLog.record(packageName, R.string.log_manage)
+            } else if (isSwitch) {
+                ConsentActivityLog.record(packageName, R.string.log_switch_action)
+                switchToRecheck = node
+            }
             debugLog("Rejected via $ruleLabel in $packageName")
             val followUpDelay = when {
                 lastActionWasToggle -> TOGGLE_FOLLOW_UP_DELAY_MS
@@ -2006,6 +2365,9 @@ class ConsentBlockerService : AccessibilityService() {
                 else -> FOLLOW_UP_DELAY_MS
             }
             scheduleFollowUpScan(packageName, if (pressedByAction) ACTION_RETRY_MS + 50 else followUpDelay)
+            if (ruleLabel.substringAfterLast(':') in setOf("reject", "necessary", "fallback", "confirm")) {
+                finishApproval(R.string.result_action_sent)
+            }
         }
         return dispatched
     }
@@ -2080,10 +2442,14 @@ class ConsentBlockerService : AccessibilityService() {
 
     /* The fail closed stop. The panel is left unsaved on purpose */
     private fun stopWithoutSaving(packageName: String, reason: String) {
+        reviewWindow = approvedWindow
+        finishApproval(R.string.result_incomplete)
         debugLog("Session NOT SAVED in $packageName: $reason. Left unconfirmed on purpose.")
     }
 
     companion object {
+        @Volatile internal var lastResult: Int = R.string.result_none
+            private set
         const val TAG = "ConsentBlocker"
         const val PREFS_NAME = "consent_blocker_prefs"
 
@@ -2197,6 +2563,7 @@ class ConsentBlockerService : AccessibilityService() {
 
         /* App names the person asked to skip, one per line */
         const val KEY_SKIPPED_APPS = "skipped_apps"
+        const val KEY_SKIPPED_PACKAGES = "excluded_app_packages"
 
         /* How events become scans, see requestScan. A scan never starts sooner
            than EVENT_SETTLE_MS after an event, so the burst that comes with a

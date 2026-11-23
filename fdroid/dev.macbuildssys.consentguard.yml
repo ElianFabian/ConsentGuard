@@ -1,4 +1,5 @@
-# F-Droid metadata template
+# Upstream ConsentGuard F-Droid metadata template (kept for reference).
+# CookieRejecter uses the application ID dev.cookierejecter and is not represented by this file.
 #
 # This file is NOT read by our own build. F-Droid metadata lives in
 # their own fdroiddata repo, not in the app's repo. When ready to submit:

@@ -5,6 +5,10 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+dependencies {
+    implementation("com.google.android.material:material:1.12.0")
+}
+
 val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("keystore.properties")
 val hasKeystore = keystorePropertiesFile.exists()
@@ -17,7 +21,7 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "dev.macbuildssys.consentguard"
+        applicationId = "dev.cookierejecter"
         minSdk = 24
         targetSdk = 34
         versionCode = 2

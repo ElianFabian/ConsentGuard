@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ConsentGuard"
+rootProject.name = "CookieRejecter"
 include(":app")

@@ -8,6 +8,7 @@
          checks the same thing on the built manifest. -->
     <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Lets ConsentGuard read the home screen name of an app, so it can tell
          banks and money apps apart without the broad "see all apps"
@@ -21,10 +22,11 @@
 
     <application
         android:allowBackup="false"
-        android:label="ConsentGuard"
+        android:label="@string/app_title"
+        android:localeConfig="@xml/locales_config"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:theme="@android:style/Theme.Material.Light">
+        android:theme="@style/CookieRejecterTheme">
 
         <activity
             android:name=".MainActivity"
@@ -40,10 +42,17 @@
             android:exported="false" />
 
         <service
+            android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
+            android:enabled="false"
+            android:exported="false">
+            <meta-data android:name="autoStoreLocales" android:value="true" />
+        </service>
+
+        <service
             android:name=".ConsentBlockerService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:exported="true"
-            android:label="ConsentGuard">
+            android:label="@string/app_title">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>
