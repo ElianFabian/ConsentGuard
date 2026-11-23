@@ -1,8 +1,14 @@
 # CookieRejecter
 
+## Why this fork exists
+
+Some Android apps put **Accept all** on the first screen and bury refusal behind several menus and a long list of vendor switches. CookieRejecter was built to make it easier to refuse optional tracking and see what changed before saving.
+
+The fork adds a tap-to-start review you can pause or stop, plus an activity log grouped by app that records switch changes. On supported Google forms, it checks both the data and vendor panels and asks you to confirm once it has verified the switches are off. CookieRejecter builds on [ConsentGuard by macbuildssys](https://github.com/macbuildssys/ConsentGuard).
+
 ## What it does
 
-CookieRejecter is a fork of [ConsentGuard by macbuildssys](https://github.com/macbuildssys/ConsentGuard). It detects supported cookie and tracking consent prompts and shows a floating **Reject optional choices** button. Tap it to run the refusal for that window.
+CookieRejecter detects supported cookie and tracking consent prompts and shows a floating **Reject optional choices** button. Tap it to run the refusal for that window.
 
 - It works in Chrome, embedded WebViews, and native consent dialogues such as the Google consent form many apps show. What it can see varies between apps and websites.
 - On a simple banner it taps the reject option, or the necessary only option.
