@@ -1,0 +1,76 @@
+name: Sync CookieRejecter release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published CookieRejecter version, such as 0.0.2
+        required: true
+        type: string
+
+jobs:
+  sync:
+    if: ${{ github.repository == 'ElianFabian/ConsentGuard' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    env:
+      SOURCE_REPOSITORY: ElianFabian/CookieRejecter
+      RELEASE_TAG: ${{ inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check source release and tag
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Use a numeric version tag such as 0.0.2."
+            exit 1
+          fi
+
+          release_json="$RUNNER_TEMP/cookierejecter-release.json"
+          gh api "repos/$SOURCE_REPOSITORY/releases/tags/$RELEASE_TAG" > "$release_json"
+          jq -e --arg tag "$RELEASE_TAG" '.tag_name == $tag and (.draft | not) and (.prerelease | not)' "$release_json"
+
+          tag_ref="refs/tags/$RELEASE_TAG"
+          source_ref="refs/cookierejecter-source/$RELEASE_TAG"
+          git fetch --no-tags "https://github.com/$SOURCE_REPOSITORY.git" "$tag_ref:$source_ref"
+          source_tag="$(git rev-parse "$source_ref")"
+          fork_tag="$(git ls-remote --refs origin "$tag_ref" | cut -f1)"
+          if [[ -z "$fork_tag" ]]; then
+            git push origin "$source_ref:$tag_ref"
+          elif [[ "$fork_tag" != "$source_tag" ]]; then
+            echo "::error::The fork's tag differs from the CookieRejecter tag."
+            exit 1
+          fi
+
+      - name: Sync signed APK and release notes
+        run: |
+          release_json="$RUNNER_TEMP/cookierejecter-release.json"
+          apk="CookieRejecter-$RELEASE_TAG.apk"
+          digest="$(jq -er --arg apk "$apk" '.assets[] | select(.name == $apk and .state == "uploaded") | .digest | select(test("^sha256:[a-f0-9]{64}$"))' "$release_json")"
+
+          if existing="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" 2>"$RUNNER_TEMP/fork-release-lookup.log")"; then
+            jq -e --arg apk "$apk" --arg digest "$digest" '
+              (.draft | not) and (.prerelease | not) and
+              (.body | length > 0) and
+              any(.assets[]; .name == $apk and .state == "uploaded" and .digest == $digest)
+            ' <<< "$existing"
+            echo "The fork release already has the verified APK and notes."
+            exit 0
+          elif ! grep -q 'HTTP 404' "$RUNNER_TEMP/fork-release-lookup.log"; then
+            cat "$RUNNER_TEMP/fork-release-lookup.log" >&2
+            exit 1
+          fi
+
+          gh release download "$RELEASE_TAG" --repo "$SOURCE_REPOSITORY" --pattern "$apk"
+          printf '%s  %s\n' "${digest#sha256:}" "$apk" | sha256sum -c -
+          jq -r '.body // ""' "$release_json" > "$RUNNER_TEMP/cookierejecter-notes.md"
+          printf '\nBuilt by GitHub Actions in [CookieRejecter](https://github.com/%s/releases/tag/%s).\n' \
+            "$SOURCE_REPOSITORY" "$RELEASE_TAG" >> "$RUNNER_TEMP/cookierejecter-notes.md"
+
+          gh release create "$RELEASE_TAG" "$apk" --repo "$GITHUB_REPOSITORY" \
+            --verify-tag --title "CookieRejecter $RELEASE_TAG" --notes-file "$RUNNER_TEMP/cookierejecter-notes.md"
