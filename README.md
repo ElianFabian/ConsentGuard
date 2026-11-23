@@ -1,5 +1,13 @@
 # ConsentGuard
 
+## Why this fork exists
+
+Some Android apps put **Accept all** on the first screen and bury refusal behind several menus and a long list of vendor switches. I created CookieRejecter to make it easier to refuse optional tracking and see what changed before saving.
+
+CookieRejecter adds a floating button to start a review, controls to pause or stop it, and an activity log grouped by app. On supported Google forms, it checks the data and vendor switches and asks for confirmation before saving. It builds on [ConsentGuard by macbuildssys](https://github.com/macbuildssys/ConsentGuard).
+
+The project lives in [ElianFabian/CookieRejecter](https://github.com/ElianFabian/CookieRejecter). The signed APK and release notes are also available in [this fork's Releases section](https://github.com/ElianFabian/ConsentGuard/releases).
+
 ```
  ██████╗ ██████╗ ███╗   ██╗███████╗███████╗███╗   ██╗████████╗
 ██╔════╝██╔═══██╗████╗  ██║██╔════╝██╔════╝████╗  ██║╚══██╔══╝
